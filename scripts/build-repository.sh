@@ -10,35 +10,71 @@ REPO="$ROOT/apt-repository"
 
 DEB="$ROOT/nova-pi-store_${VERSION}_all.deb"
 
-PACKAGE_NAME="nova-pi-store"
-
+echo
 echo "======================================"
 echo "Nova Pi Store APT Repository"
 echo "======================================"
 echo
+echo "Version: $VERSION"
+echo
+
+
+# --------------------------------------------------
+# Repository löschen
+# --------------------------------------------------
 
 rm -rf "$REPO"
+
+
+# --------------------------------------------------
+# Verzeichnisstruktur erstellen
+# --------------------------------------------------
 
 mkdir -p \
     "$REPO/pool/main" \
     "$REPO/dists/stable/main/binary-all"
 
 
-echo "[1/5] Copy Debian package..."
+# --------------------------------------------------
+# Debian-Paket kopieren
+# --------------------------------------------------
+
+echo "[1/6] Kopiere Debian-Paket..."
+
+if [ ! -f "$DEB" ]; then
+
+    echo
+    echo "FEHLER:"
+    echo "Debian-Paket nicht gefunden:"
+    echo "$DEB"
+    echo
+
+    exit 1
+
+fi
 
 cp \
     "$DEB" \
     "$REPO/pool/main/"
 
 
-echo "[2/5] Read Debian package information..."
+# --------------------------------------------------
+# Paketinformationen lesen
+# --------------------------------------------------
+
+echo "[2/6] Lese Paketinformationen..."
 
 PACKAGE_INFO=$(dpkg-deb -f "$DEB")
 
 
-echo "[3/5] Generate Packages file..."
+# --------------------------------------------------
+# Packages-Datei erzeugen
+# --------------------------------------------------
+
+echo "[3/6] Erstelle Packages-Datei..."
 
 python3 <<PY
+
 import subprocess
 from pathlib import Path
 
@@ -63,10 +99,12 @@ for line in output.splitlines():
 
 size = deb.stat().st_size
 
+
 md5 = subprocess.check_output(
     ["md5sum", str(deb)],
     text=True
 ).split()[0]
+
 
 sha256 = subprocess.check_output(
     ["sha256sum", str(deb)],
@@ -102,22 +140,36 @@ packages_file = (
     "dists/stable/main/binary-all/Packages"
 )
 
+
 packages_file.write_text(
     packages,
     encoding="utf-8"
 )
 
+
+print()
 print(packages)
+
 PY
 
 
-echo "[4/5] Compress Packages..."
+# --------------------------------------------------
+# Packages komprimieren
+# --------------------------------------------------
 
-gzip -9 -k \
+echo "[4/6] Komprimiere Packages..."
+
+gzip \
+    -9 \
+    -k \
     "$REPO/dists/stable/main/binary-all/Packages"
 
 
-echo "[5/5] Create Release file..."
+# --------------------------------------------------
+# Release-Datei
+# --------------------------------------------------
+
+echo "[5/6] Erstelle Release-Datei..."
 
 cat > "$REPO/dists/stable/Release" <<EOF
 Origin: Nova Pi Store
@@ -130,10 +182,49 @@ Description: Nova Pi Store APT Repository
 EOF
 
 
+# --------------------------------------------------
+# Installer kopieren
+# --------------------------------------------------
+
+echo "[6/6] Kopiere Installer..."
+
+if [ ! -f "$ROOT/scripts/install.sh" ]; then
+
+    echo
+    echo "FEHLER:"
+    echo "scripts/install.sh wurde nicht gefunden."
+    echo
+
+    exit 1
+
+fi
+
+
+cp \
+    "$ROOT/scripts/install.sh" \
+    "$REPO/install.sh"
+
+
+chmod 755 \
+    "$REPO/install.sh"
+
+
+# --------------------------------------------------
+# Übersicht
+# --------------------------------------------------
+
 echo
 echo "======================================"
-echo "Repository created successfully"
+echo "Repository erfolgreich erstellt"
 echo "======================================"
 echo
 
-find "$REPO" -type f | sort
+find "$REPO" \
+    -type f \
+    -print \
+    | sort
+
+echo
+echo "======================================"
+echo "Fertig"
+echo "======================================"
