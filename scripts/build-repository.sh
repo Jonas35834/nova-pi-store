@@ -10,6 +10,7 @@ REPO="$ROOT/apt-repository"
 
 DEB="$ROOT/nova-pi-store_${VERSION}_all.deb"
 
+PACKAGE_NAME="nova-pi-store"
 
 echo "======================================"
 echo "Nova Pi Store APT Repository"
@@ -23,32 +24,102 @@ mkdir -p \
     "$REPO/dists/stable/main/binary-all"
 
 
-echo "[1/4] Copy Debian package..."
+echo "[1/5] Copy Debian package..."
 
 cp \
     "$DEB" \
     "$REPO/pool/main/"
 
 
-echo "[2/4] Generate Packages..."
+echo "[2/5] Read Debian package information..."
 
-cd "$REPO"
-
-dpkg-scanpackages \
-    pool/main \
-    /dev/null \
-    > dists/stable/main/binary-all/Packages
+PACKAGE_INFO=$(dpkg-deb -f "$DEB")
 
 
-echo "[3/4] Compress Packages..."
+echo "[3/5] Generate Packages file..."
+
+python3 <<PY
+import subprocess
+from pathlib import Path
+
+deb = Path("$DEB")
+repo = Path("$REPO")
+
+output = subprocess.check_output(
+    ["dpkg-deb", "-f", str(deb)],
+    text=True
+)
+
+fields = {}
+
+for line in output.splitlines():
+
+    if ": " in line:
+
+        key, value = line.split(": ", 1)
+
+        fields[key] = value
+
+
+size = deb.stat().st_size
+
+md5 = subprocess.check_output(
+    ["md5sum", str(deb)],
+    text=True
+).split()[0]
+
+sha256 = subprocess.check_output(
+    ["sha256sum", str(deb)],
+    text=True
+).split()[0]
+
+
+relative = (
+    "pool/main/" +
+    deb.name
+)
+
+
+packages = f"""Package: {fields["Package"]}
+Version: {fields["Version"]}
+Architecture: {fields["Architecture"]}
+Maintainer: {fields["Maintainer"]}
+Installed-Size: {fields.get("Installed-Size", "")}
+Depends: {fields.get("Depends", "")}
+Section: {fields.get("Section", "")}
+Priority: {fields.get("Priority", "")}
+Filename: {relative}
+Size: {size}
+MD5sum: {md5}
+SHA256: {sha256}
+Description: {fields.get("Description", "")}
+
+"""
+
+
+packages_file = (
+    repo /
+    "dists/stable/main/binary-all/Packages"
+)
+
+packages_file.write_text(
+    packages,
+    encoding="utf-8"
+)
+
+print(packages)
+PY
+
+
+echo "[4/5] Compress Packages..."
 
 gzip -9 -k \
-    dists/stable/main/binary-all/Packages
+    "$REPO/dists/stable/main/binary-all/Packages"
 
 
-echo "[4/4] Create Release file..."
+echo "[5/5] Create Release file..."
 
-cat > dists/stable/Release <<EOF
+cat > "$REPO/dists/stable/Release" <<EOF
 Origin: Nova Pi Store
 Label: Nova Pi Store
 Suite: stable
@@ -60,10 +131,9 @@ EOF
 
 
 echo
-echo "Repository created:"
+echo "======================================"
+echo "Repository created successfully"
+echo "======================================"
 echo
 
 find "$REPO" -type f | sort
-
-echo
-echo "DONE"
