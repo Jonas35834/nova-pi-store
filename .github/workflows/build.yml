@@ -1,14 +1,22 @@
 name: Build Nova Pi Store
 
 on:
+
   push:
     branches:
       - main
 
   workflow_dispatch:
 
+
 permissions:
+
   contents: write
+
+  pages: write
+
+  id-token: write
+
 
 jobs:
 
@@ -18,26 +26,23 @@ jobs:
 
     runs-on: ubuntu-latest
 
+
     steps:
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
 
-      - name: Check project
+      - name: Install Debian repository tools
         run: |
-          echo "Project structure:"
-          find . -maxdepth 4 -type f | sort
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
 
 
-      - name: Check Debian tools
-        run: |
-          dpkg-deb --version
-
-
-      - name: Make build script executable
+      - name: Make scripts executable
         run: |
           chmod +x scripts/build-deb.sh
+          chmod +x scripts/build-repository.sh
 
 
       - name: Build Debian package
@@ -45,45 +50,51 @@ jobs:
           ./scripts/build-deb.sh 1.0.0
 
 
-      - name: Check generated package
+      - name: Build APT repository
         run: |
-          ls -lh *.deb
-          dpkg-deb --info *.deb
+          ./scripts/build-repository.sh 1.0.0
 
 
-      - name: Upload build artifact
+      - name: Check repository
+        run: |
+          find apt-repository -type f | sort
+
+
+      - name: Upload Debian package
         uses: actions/upload-artifact@v4
+
         with:
           name: nova-pi-store-deb
+
           path: "*.deb"
-          if-no-files-found: error
 
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload APT repository
+        uses: actions/upload-pages-artifact@v3
 
         with:
+          path: "./apt-repository"
 
-          tag_name: v1.0.0
 
-          name: Nova Pi Store v1.0.0
+  deploy:
 
-          body: |
-            # 🍓 Nova Pi Store v1.0.0
+    name: Deploy APT Repository
 
-            Erste Version des Nova Pi Store.
+    needs: build
 
-            ## Installation
+    runs-on: ubuntu-latest
 
-            Die Debian-Datei kann direkt auf Raspberry Pi OS installiert werden:
 
-            ```bash
-            sudo apt install ./nova-pi-store_1.0.0_all.deb
-            ```
+    environment:
 
-            Danach ist die Weboberfläche unter Port 8080 erreichbar.
+      name: github-pages
 
-          files: |
-            *.deb
+      url: ${{ steps.deployment.outputs.page_url }}
 
-          make_latest: true
+
+    steps:
+
+      - name: Deploy GitHub Pages
+        id: deployment
+
+        uses: actions/deploy-pages@v4
