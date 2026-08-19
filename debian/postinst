@@ -1,0 +1,84 @@
+
+#!/bin/sh
+
+set -e
+
+
+if ! id nova-store >/dev/null 2>&1; then
+
+    useradd \
+        --system \
+        --home /opt/nova-pi-store \
+        --shell /usr/sbin/nologin \
+        nova-store
+
+fi
+
+
+mkdir -p /opt/nova-pi-store
+
+
+cp -r \
+    /usr/share/nova-pi-store/app \
+    /opt/nova-pi-store/
+
+
+chown -R \
+    nova-store:nova-store \
+    /opt/nova-pi-store
+
+
+cat > /usr/local/bin/nova-pi-store-install <<'EOF'
+#!/bin/sh
+
+set -e
+
+
+if [ "$#" -eq 0 ]; then
+    echo "Keine Pakete angegeben."
+    exit 1
+fi
+
+
+for package in "$@"; do
+
+    case "$package" in
+
+        ''|*[!a-zA-Z0-9.+_-]*)
+
+            echo "Ungültiger Paketname: $package"
+
+            exit 1
+
+            ;;
+
+    esac
+
+done
+
+
+exec /usr/bin/apt-get install -y "$@"
+EOF
+
+
+chmod 755 \
+    /usr/local/bin/nova-pi-store-install
+
+
+cat > /etc/sudoers.d/nova-pi-store <<'EOF'
+nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-install *
+EOF
+
+
+chmod 440 \
+    /etc/sudoers.d/nova-pi-store
+
+
+systemctl daemon-reload
+
+systemctl enable nova-pi-store.service
+
+systemctl restart nova-pi-store.service || true
+
+
+exit 0
