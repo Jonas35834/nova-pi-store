@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -e
+
+systemctl stop nova-pi-store.service 2>/dev/null || true
+
+systemctl disable nova-pi-store.service 2>/dev/null || true
+
+exit 0
