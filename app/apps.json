@@ -7,14 +7,12 @@
             "icon": "📦",
             "category": "Entwicklung",
             "type": "apt",
-            "packages": [
-                "git"
-            ]
+            "packages": ["git"]
         },
         {
             "id": "python",
             "name": "Python",
-            "description": "Python 3 mit pip",
+            "description": "Python 3 und pip",
             "icon": "🐍",
             "category": "Entwicklung",
             "type": "apt",
@@ -24,15 +22,22 @@
             ]
         },
         {
+            "id": "nodejs",
+            "name": "Node.js",
+            "description": "JavaScript-Laufzeitumgebung",
+            "icon": "🟢",
+            "category": "Entwicklung",
+            "type": "apt",
+            "packages": ["nodejs", "npm"]
+        },
+        {
             "id": "nginx",
             "name": "Nginx",
             "description": "Schneller Webserver",
             "icon": "🌐",
             "category": "Server",
             "type": "apt",
-            "packages": [
-                "nginx"
-            ]
+            "packages": ["nginx"]
         },
         {
             "id": "apache",
@@ -41,9 +46,7 @@
             "icon": "🌐",
             "category": "Server",
             "type": "apt",
-            "packages": [
-                "apache2"
-            ]
+            "packages": ["apache2"]
         },
         {
             "id": "docker",
@@ -52,31 +55,25 @@
             "icon": "🐳",
             "category": "Server",
             "type": "apt",
-            "packages": [
-                "docker.io"
-            ]
+            "packages": ["docker.io"]
         },
         {
             "id": "samba",
             "name": "Samba",
-            "description": "Dateifreigaben im Netzwerk",
+            "description": "Dateifreigaben für Windows und Linux",
             "icon": "📁",
             "category": "Netzwerk",
             "type": "apt",
-            "packages": [
-                "samba"
-            ]
+            "packages": ["samba"]
         },
         {
             "id": "curl",
             "name": "cURL",
-            "description": "Werkzeug für Netzwerk-Anfragen",
+            "description": "Werkzeug für HTTP-Anfragen",
             "icon": "🔗",
             "category": "Tools",
             "type": "apt",
-            "packages": [
-                "curl"
-            ]
+            "packages": ["curl"]
         },
         {
             "id": "htop",
@@ -85,9 +82,7 @@
             "icon": "📊",
             "category": "Tools",
             "type": "apt",
-            "packages": [
-                "htop"
-            ]
+            "packages": ["htop"]
         },
         {
             "id": "tmux",
@@ -96,9 +91,7 @@
             "icon": "⌨️",
             "category": "Tools",
             "type": "apt",
-            "packages": [
-                "tmux"
-            ]
+            "packages": ["tmux"]
         },
         {
             "id": "unzip",
@@ -107,9 +100,7 @@
             "icon": "🗜️",
             "category": "Tools",
             "type": "apt",
-            "packages": [
-                "unzip"
-            ]
+            "packages": ["unzip"]
         }
     ]
 }
