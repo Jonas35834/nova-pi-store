@@ -1,95 +1,49 @@
 # 🍓 Nova Pi Store
 
-A lightweight web-based application store for Raspberry Pi OS Lite.
+Eine einfache Web-App zum Installieren und Verwalten von Anwendungen auf **Raspberry Pi OS Lite**.
 
-## Features
+Nova Pi Store ist für Raspberry Pis gedacht, auf denen normalerweise nur SSH zur Verfügung steht.
 
-- Web interface
-- Raspberry Pi OS Lite support
-- APT application installation
-- Search
-- Categories
-- Installation output
-- Installed-app detection
-- Debian package
-- GitHub Actions builds
+---
 
-## Architecture
+## ✨ Funktionen
 
-Nova Pi Store consists of:
+- 🌐 Weboberfläche
+- 📦 Anwendungen über APT installieren
+- 🖥️ Für Raspberry Pi OS Lite
+- 🔧 Funktioniert ohne Desktop-Umgebung
+- 🚀 Einfache Installation
+- 🔄 Anwendungen können später aktualisiert werden
+- 🐧 Debian-Paket (`.deb`)
+- 📡 Eigenes APT-Repository
+- 💻 Verwaltung über den Browser
 
-- Python
-- Flask
-- HTML
-- CSS
-- JavaScript
-- Debian packaging
-- systemd
+---
 
-## Development
+## 📋 Voraussetzungen
 
-Run:
+Nova Pi Store benötigt:
 
-```bash
-python3 app/app.py
-````
+- Raspberry Pi
+- Raspberry Pi OS Lite
+- Internetverbindung
+- SSH-Zugriff
+- Python 3
+- APT
 
-Then open:
+Empfohlen:
 
-```text
-http://localhost:8080
-```
+- Raspberry Pi 3 oder neuer
+- Raspberry Pi 4 / 5
+- Raspberry Pi OS Lite 64-bit
 
-## Build Debian package
+---
 
-```bash
-chmod +x scripts/build-deb.sh
+# 🚀 Installation
 
-./scripts/build-deb.sh
-```
+Die Installation erfolgt direkt über das Internet.
 
-The result will be:
-
-```text
-nova-pi-store_1.0.0_all.deb
-```
-
-## Installation
+Auf dem Raspberry Pi ausführen:
 
 ```bash
-sudo apt install ./nova-pi-store_1.0.0_all.deb
-```
-
-The web interface runs on:
-
-```text
-http://RASPBERRY-PI-IP:8080
-```
-
-## App database
-
-Applications are defined in:
-
-```text
-app/apps.json
-```
-
-Example:
-
-```json
-{
-    "id": "nginx",
-    "name": "Nginx",
-    "description": "Webserver",
-    "icon": "🌐",
-    "category": "Server",
-    "type": "apt",
-    "packages": ["nginx"]
-}
-```
-
-Only predefined APT package names are allowed.
-
-## License
-
-MIT
+curl -fsSL https://jonas35834.github.io/nova-pi-store/install.sh | sudo bash
