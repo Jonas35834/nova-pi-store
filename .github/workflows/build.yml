@@ -1,51 +1,52 @@
 name: Build Nova Pi Store
 
 on:
-
   push:
     branches:
       - main
 
   workflow_dispatch:
 
-
 permissions:
-
   contents: read
 
-
 jobs:
-
   build:
-
     name: Build Debian Package
 
     runs-on: ubuntu-latest
-
 
     steps:
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check project
+        run: |
+          echo "Project structure:"
+          find . -maxdepth 4 -type f | sort
 
       - name: Install Debian tools
         run: |
           sudo apt-get update
           sudo apt-get install -y dpkg-dev
 
-
-      - name: Build package
+      - name: Make build script executable
         run: |
           chmod +x scripts/build-deb.sh
+
+      - name: Build Debian package
+        run: |
           ./scripts/build-deb.sh 1.0.0
 
+      - name: Check generated package
+        run: |
+          ls -lh *.deb
+          dpkg-deb --info *.deb
 
-      - name: Upload package
+      - name: Upload Debian package
         uses: actions/upload-artifact@v4
-
         with:
-
           name: nova-pi-store-deb
-
           path: "*.deb"
+          if-no-files-found: error
