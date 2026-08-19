@@ -1,0 +1,10 @@
+Package: nova-pi-store
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: Jonas35834
+Depends: python3, python3-flask, sudo
+Description: Nova Pi Store
+ A web-based application store for Raspberry Pi OS Lite.
+ Install predefined applications through a web interface.
