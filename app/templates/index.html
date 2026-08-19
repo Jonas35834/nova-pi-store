@@ -1,0 +1,158 @@
+
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Nova Pi Store</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+
+</head>
+
+<body>
+
+<header>
+
+    <div class="header">
+
+        <div>
+
+            <h1>🍓 Nova Pi Store</h1>
+
+            <p>
+                Dein App Store für Raspberry Pi OS Lite
+            </p>
+
+        </div>
+
+        <div class="online">
+            ● ONLINE
+        </div>
+
+    </div>
+
+</header>
+
+
+<main>
+
+    <section class="hero">
+
+        <h2>
+            Was möchtest du installieren?
+        </h2>
+
+        <input
+            id="search"
+            type="search"
+            placeholder="🔎 App suchen..."
+        >
+
+    </section>
+
+
+    <nav id="categories">
+
+        <button
+            class="category active"
+            data-category="Alle"
+        >
+            Alle
+        </button>
+
+    </nav>
+
+
+    <section
+        id="apps"
+        class="apps"
+    >
+
+        {% for item in apps %}
+
+        <article
+            class="app-card"
+            data-name="{{ item.name|lower }}"
+            data-description="{{ item.description|lower }}"
+            data-category="{{ item.category }}"
+        >
+
+            <div class="icon">
+                {{ item.icon }}
+            </div>
+
+            <h3>
+                {{ item.name }}
+            </h3>
+
+            <p>
+                {{ item.description }}
+            </p>
+
+            <span class="tag">
+                {{ item.category }}
+            </span>
+
+            {% if item.installed %}
+
+            <button
+                class="install installed"
+                disabled
+            >
+                ✓ Installiert
+            </button>
+
+            {% else %}
+
+            <button
+                class="install"
+                onclick="installApp(
+                    '{{ item.id }}',
+                    this
+                )"
+            >
+                Installieren
+            </button>
+
+            {% endif %}
+
+        </article>
+
+        {% endfor %}
+
+    </section>
+
+
+    <section
+        id="terminal"
+        class="terminal hidden"
+    >
+
+        <div class="terminal-header">
+            Installation
+        </div>
+
+        <pre id="output"></pre>
+
+    </section>
+
+</main>
+
+
+<script src="/static/app.js"></script>
+
+</body>
+
+</html>
+
