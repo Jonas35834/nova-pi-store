@@ -1,0 +1,21 @@
+[Unit]
+Description=Nova Pi Store Web Application
+After=network.target
+
+[Service]
+Type=simple
+
+User=nova-store
+Group=nova-store
+
+WorkingDirectory=/opt/nova-pi-store
+
+ExecStart=/usr/bin/python3 /opt/nova-pi-store/app/app.py
+
+Restart=always
+RestartSec=3
+
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
