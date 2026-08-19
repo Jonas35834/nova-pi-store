@@ -1,16 +1,20 @@
 name: Build Nova Pi Store
 
 on:
+
   push:
     branches:
       - main
 
   workflow_dispatch:
 
+
 permissions:
+
   contents: write
   pages: write
   id-token: write
+
 
 jobs:
 
@@ -20,50 +24,112 @@ jobs:
 
     runs-on: ubuntu-latest
 
+
     steps:
 
+      # ---------------------------------------------
+      # Repository
+      # ---------------------------------------------
+
       - name: Checkout repository
+
         uses: actions/checkout@v4
 
 
-      - name: Check Debian tools
+      # ---------------------------------------------
+      # Projekt prüfen
+      # ---------------------------------------------
+
+      - name: Check project structure
+
         run: |
+
+          echo "Project structure:"
+          echo
+
+          find . \
+            -maxdepth 4 \
+            -type f \
+            | sort
+
+
+      # ---------------------------------------------
+      # Debian Tools prüfen
+      # ---------------------------------------------
+
+      - name: Check Debian tools
+
+        run: |
+
           dpkg-deb --version
 
 
-      - name: Check project structure
-        run: |
-          echo "Project structure:"
-          find . -maxdepth 4 -type f | sort
-
+      # ---------------------------------------------
+      # Skripte ausführbar machen
+      # ---------------------------------------------
 
       - name: Make scripts executable
+
         run: |
+
           chmod +x scripts/build-deb.sh
+
           chmod +x scripts/build-repository.sh
 
+          chmod +x scripts/install.sh
+
+
+      # ---------------------------------------------
+      # Debian Paket bauen
+      # ---------------------------------------------
 
       - name: Build Debian package
+
         run: |
+
           ./scripts/build-deb.sh 1.0.0
 
 
+      # ---------------------------------------------
+      # Debian Paket prüfen
+      # ---------------------------------------------
+
       - name: Check Debian package
+
         run: |
+
+          echo
           echo "Generated package:"
+          echo
+
           ls -lh *.deb
+
           echo
           echo "Package information:"
+          echo
+
           dpkg-deb --info *.deb
 
 
+      # ---------------------------------------------
+      # APT Repository bauen
+      # ---------------------------------------------
+
       - name: Build APT repository
+
         run: |
+
           ./scripts/build-repository.sh 1.0.0
 
 
+      # ---------------------------------------------
+      # APT Repository prüfen
+      # ---------------------------------------------
+
       - name: Check APT repository
+
         run: |
+
           echo
           echo "APT repository:"
           echo
@@ -74,17 +140,34 @@ jobs:
             | sort
 
           echo
-          echo "Packages:"
+          echo "--------------------------------------"
+          echo "Release"
+          echo "--------------------------------------"
+          echo
+
+          cat \
+            apt-repository/dists/stable/Release
+
+          echo
+          echo "--------------------------------------"
+          echo "Packages"
+          echo "--------------------------------------"
           echo
 
           cat \
             apt-repository/dists/stable/main/binary-all/Packages
 
 
+      # ---------------------------------------------
+      # Debian Artifact
+      # ---------------------------------------------
+
       - name: Upload Debian package
+
         uses: actions/upload-artifact@v4
 
         with:
+
           name: nova-pi-store-deb
 
           path: "*.deb"
@@ -92,14 +175,25 @@ jobs:
           if-no-files-found: error
 
 
+      # ---------------------------------------------
+      # GitHub Pages Artifact
+      # ---------------------------------------------
+
       - name: Upload APT repository
+
         uses: actions/upload-pages-artifact@v3
 
         with:
+
           path: "./apt-repository"
 
 
+      # ---------------------------------------------
+      # GitHub Release
+      # ---------------------------------------------
+
       - name: Create GitHub Release
+
         uses: softprops/action-gh-release@v2
 
         with:
@@ -109,6 +203,7 @@ jobs:
           name: Nova Pi Store v1.0.0
 
           body: |
+
             # 🍓 Nova Pi Store v1.0.0
 
             Erste Version des Nova Pi Store.
@@ -121,13 +216,19 @@ jobs:
             sudo apt install ./nova-pi-store_1.0.0_all.deb
             ```
 
-            Die Weboberfläche läuft anschließend auf Port 8080.
+            Nach der Installation läuft die
+            Weboberfläche auf Port 8080.
 
           files: |
+
             *.deb
 
           make_latest: true
 
+
+  # =================================================
+  # GITHUB PAGES
+  # =================================================
 
   deploy:
 
@@ -136,6 +237,7 @@ jobs:
     needs: build
 
     runs-on: ubuntu-latest
+
 
     environment:
 
@@ -146,7 +248,9 @@ jobs:
 
     steps:
 
+
       - name: Deploy GitHub Pages
+
         id: deployment
 
         uses: actions/deploy-pages@v4
