@@ -1,0 +1,115 @@
+{
+    "apps": [
+        {
+            "id": "git",
+            "name": "Git",
+            "description": "Versionsverwaltung für Entwickler",
+            "icon": "📦",
+            "category": "Entwicklung",
+            "type": "apt",
+            "packages": [
+                "git"
+            ]
+        },
+        {
+            "id": "python",
+            "name": "Python",
+            "description": "Python 3 mit pip",
+            "icon": "🐍",
+            "category": "Entwicklung",
+            "type": "apt",
+            "packages": [
+                "python3",
+                "python3-pip"
+            ]
+        },
+        {
+            "id": "nginx",
+            "name": "Nginx",
+            "description": "Schneller Webserver",
+            "icon": "🌐",
+            "category": "Server",
+            "type": "apt",
+            "packages": [
+                "nginx"
+            ]
+        },
+        {
+            "id": "apache",
+            "name": "Apache",
+            "description": "Beliebter Webserver",
+            "icon": "🌐",
+            "category": "Server",
+            "type": "apt",
+            "packages": [
+                "apache2"
+            ]
+        },
+        {
+            "id": "docker",
+            "name": "Docker",
+            "description": "Container-Plattform",
+            "icon": "🐳",
+            "category": "Server",
+            "type": "apt",
+            "packages": [
+                "docker.io"
+            ]
+        },
+        {
+            "id": "samba",
+            "name": "Samba",
+            "description": "Dateifreigaben im Netzwerk",
+            "icon": "📁",
+            "category": "Netzwerk",
+            "type": "apt",
+            "packages": [
+                "samba"
+            ]
+        },
+        {
+            "id": "curl",
+            "name": "cURL",
+            "description": "Werkzeug für Netzwerk-Anfragen",
+            "icon": "🔗",
+            "category": "Tools",
+            "type": "apt",
+            "packages": [
+                "curl"
+            ]
+        },
+        {
+            "id": "htop",
+            "name": "htop",
+            "description": "Interaktiver Systemmonitor",
+            "icon": "📊",
+            "category": "Tools",
+            "type": "apt",
+            "packages": [
+                "htop"
+            ]
+        },
+        {
+            "id": "tmux",
+            "name": "tmux",
+            "description": "Terminal-Multiplexer",
+            "icon": "⌨️",
+            "category": "Tools",
+            "type": "apt",
+            "packages": [
+                "tmux"
+            ]
+        },
+        {
+            "id": "unzip",
+            "name": "Unzip",
+            "description": "ZIP-Dateien entpacken",
+            "icon": "🗜️",
+            "category": "Tools",
+            "type": "apt",
+            "packages": [
+                "unzip"
+            ]
+        }
+    ]
+}
