@@ -1,43 +1,46 @@
 import json
+import os
+import re
 import subprocess
 import threading
-import os
-
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, jsonify, render_template
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 APPS_FILE = os.path.join(BASE_DIR, "apps.json")
 
 app = Flask(__name__)
 
-install_state = {
+state = {
     "running": False,
     "app": None,
     "output": "",
     "success": None
 }
 
-lock = threading.Lock()
+state_lock = threading.Lock()
 
 
 def load_apps():
     with open(APPS_FILE, "r", encoding="utf-8") as file:
-        data = json.load(file)
-
-    return data.get("apps", [])
+        return json.load(file)["apps"]
 
 
-def get_app(app_id):
+def find_app(app_id):
     for item in load_apps():
-        if item.get("id") == app_id:
+        if item["id"] == app_id:
             return item
 
     return None
 
 
-def package_installed(package):
+def is_installed(package):
     result = subprocess.run(
-        ["dpkg-query", "-W", "-f=${Status}", package],
+        [
+            "dpkg-query",
+            "-W",
+            "-f=${Status}",
+            package
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True
@@ -46,96 +49,118 @@ def package_installed(package):
     return result.stdout.strip() == "install ok installed"
 
 
-def is_installed(app_info):
-    packages = app_info.get("packages", [])
+def app_is_installed(item):
+    packages = item.get("packages", [])
 
     if not packages:
         return False
 
-    return all(package_installed(package) for package in packages)
+    return all(
+        is_installed(package)
+        for package in packages
+    )
 
 
-def run_installation(app_id):
-    global install_state
+def valid_package_name(package):
+    return bool(
+        re.fullmatch(
+            r"[a-zA-Z0-9.+_-]+",
+            package
+        )
+    )
 
-    with lock:
-        try:
-            app_info = get_app(app_id)
 
-            if not app_info:
-                install_state["success"] = False
-                install_state["output"] = "App nicht gefunden."
-                return
+def install_worker(app_id):
 
-            install_state["running"] = True
-            install_state["app"] = app_id
-            install_state["output"] = ""
-            install_state["success"] = None
+    global state
 
-            app_type = app_info.get("type")
+    with state_lock:
 
-            if app_type != "apt":
-                install_state["output"] = (
-                    "Dieser App-Typ wird momentan nicht unterstützt."
+        item = find_app(app_id)
+
+        if item is None:
+            state["output"] = "App nicht gefunden."
+            state["success"] = False
+            state["running"] = False
+            return
+
+        state["running"] = True
+        state["app"] = app_id
+        state["output"] = ""
+        state["success"] = None
+
+    try:
+
+        if item.get("type") != "apt":
+            raise Exception(
+                "Dieser App-Typ wird noch nicht unterstützt."
+            )
+
+        packages = item.get("packages", [])
+
+        if not packages:
+            raise Exception(
+                "Keine Pakete definiert."
+            )
+
+        for package in packages:
+
+            if not valid_package_name(package):
+                raise Exception(
+                    f"Ungültiger Paketname: {package}"
                 )
-                install_state["success"] = False
-                return
 
-            packages = app_info.get("packages", [])
+        command = [
+            "sudo",
+            "/usr/local/bin/nova-pi-store-install"
+        ]
 
-            if not packages:
-                install_state["output"] = "Keine Pakete angegeben."
-                install_state["success"] = False
-                return
+        command.extend(packages)
 
-            # Sicherheitsprüfung:
-            # Nur Paketnamen mit erlaubten Zeichen.
-            for package in packages:
-                if not package.replace("-", "").replace(".", "").replace("+", "").isalnum():
-                    install_state["output"] = (
-                        f"Ungültiger Paketname: {package}"
-                    )
-                    install_state["success"] = False
-                    return
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
 
-            command = [
-                "sudo",
-                "/usr/local/bin/nova-pi-store-install"
-            ]
+        for line in process.stdout:
 
-            command.extend(packages)
+            with state_lock:
+                state["output"] += line
 
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
+        process.wait()
+
+        with state_lock:
+            state["success"] = (
+                process.returncode == 0
             )
 
-            for line in process.stdout:
-                install_state["output"] += line
+    except Exception as error:
 
-            process.wait()
-
-            install_state["success"] = process.returncode == 0
-
-        except Exception as error:
-            install_state["output"] += (
-                f"\nFehler: {error}\n"
+        with state_lock:
+            state["output"] += (
+                "\nFEHLER: "
+                + str(error)
+                + "\n"
             )
-            install_state["success"] = False
 
-        finally:
-            install_state["running"] = False
+            state["success"] = False
+
+    finally:
+
+        with state_lock:
+            state["running"] = False
 
 
 @app.route("/")
 def index():
+
     apps = load_apps()
 
     for item in apps:
-        item["installed"] = is_installed(item)
+        item["installed"] = app_is_installed(item)
 
     return render_template(
         "index.html",
@@ -145,33 +170,39 @@ def index():
 
 @app.route("/api/apps")
 def api_apps():
+
     apps = load_apps()
 
     for item in apps:
-        item["installed"] = is_installed(item)
+        item["installed"] = app_is_installed(item)
 
     return jsonify(apps)
 
 
-@app.route("/api/install/<app_id>", methods=["POST"])
+@app.route(
+    "/api/install/<app_id>",
+    methods=["POST"]
+)
 def install(app_id):
 
-    if install_state["running"]:
+    if state["running"]:
+
         return jsonify({
             "success": False,
             "error": "Es läuft bereits eine Installation."
         }), 409
 
-    app_info = get_app(app_id)
+    item = find_app(app_id)
 
-    if not app_info:
+    if item is None:
+
         return jsonify({
             "success": False,
             "error": "App nicht gefunden."
         }), 404
 
     thread = threading.Thread(
-        target=run_installation,
+        target=install_worker,
         args=(app_id,),
         daemon=True
     )
@@ -185,13 +216,22 @@ def install(app_id):
 
 @app.route("/api/status")
 def status():
-    return jsonify(install_state)
+
+    with state_lock:
+
+        return jsonify({
+            "running": state["running"],
+            "app": state["app"],
+            "output": state["output"],
+            "success": state["success"]
+        })
 
 
 @app.route("/api/system")
 def system():
 
     try:
+
         hostname = subprocess.check_output(
             ["hostname"],
             text=True
@@ -202,24 +242,20 @@ def system():
             text=True
         ).strip()
 
-        memory = subprocess.check_output(
-            ["free", "-m"],
-            text=True
-        )
-
         return jsonify({
             "hostname": hostname,
-            "uptime": uptime,
-            "memory": memory
+            "uptime": uptime
         })
 
     except Exception as error:
+
         return jsonify({
             "error": str(error)
         })
 
 
 if __name__ == "__main__":
+
     app.run(
         host="0.0.0.0",
         port=8080,
