@@ -1,0 +1,324 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+
+    min-height: 100vh;
+
+    background:
+        radial-gradient(
+            circle at top,
+            #1e293b,
+            #080b10 55%
+        );
+
+    color: #f8fafc;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+}
+
+header {
+    position: sticky;
+
+    top: 0;
+
+    z-index: 10;
+
+    background: rgba(
+        8,
+        11,
+        16,
+        0.88
+    );
+
+    backdrop-filter: blur(15px);
+
+    border-bottom:
+        1px solid #263244;
+}
+
+.header {
+    max-width: 1200px;
+
+    margin: auto;
+
+    padding: 20px;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+}
+
+h1 {
+    margin: 0;
+
+    font-size: 28px;
+}
+
+header p {
+    color: #94a3b8;
+
+    margin: 5px 0 0;
+}
+
+.online {
+    color: #4ade80;
+
+    font-size: 13px;
+
+    font-weight: bold;
+}
+
+main {
+    max-width: 1200px;
+
+    margin: auto;
+
+    padding: 30px 20px 80px;
+}
+
+.hero {
+    text-align: center;
+
+    padding: 35px 0;
+}
+
+.hero h2 {
+    font-size: 32px;
+
+    margin-bottom: 25px;
+}
+
+#search {
+    width: min(
+        650px,
+        100%
+    );
+
+    padding: 16px 20px;
+
+    border-radius: 14px;
+
+    border:
+        1px solid #334155;
+
+    background: #111827;
+
+    color: white;
+
+    font-size: 16px;
+
+    outline: none;
+}
+
+#search:focus {
+    border-color: #64748b;
+}
+
+#categories {
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 10px;
+
+    margin-bottom: 25px;
+}
+
+.category {
+    padding: 9px 16px;
+
+    border-radius: 20px;
+
+    border:
+        1px solid #334155;
+
+    background: #111827;
+
+    color: #cbd5e1;
+
+    cursor: pointer;
+}
+
+.category:hover,
+.category.active {
+    background: white;
+
+    color: #0f172a;
+}
+
+.apps {
+    display: grid;
+
+    grid-template-columns:
+        repeat(
+            auto-fill,
+            minmax(280px, 1fr)
+        );
+
+    gap: 18px;
+}
+
+.app-card {
+    padding: 22px;
+
+    border-radius: 18px;
+
+    background:
+        rgba(
+            17,
+            24,
+            39,
+            0.85
+        );
+
+    border:
+        1px solid #273244;
+
+    transition:
+        transform 0.2s,
+        border-color 0.2s;
+}
+
+.app-card:hover {
+    transform: translateY(-4px);
+
+    border-color: #475569;
+}
+
+.icon {
+    font-size: 45px;
+
+    margin-bottom: 12px;
+}
+
+.app-card h3 {
+    margin: 0;
+
+    font-size: 21px;
+}
+
+.app-card p {
+    min-height: 42px;
+
+    color: #94a3b8;
+
+    line-height: 1.4;
+}
+
+.tag {
+    display: inline-block;
+
+    padding: 5px 9px;
+
+    margin-bottom: 18px;
+
+    border-radius: 8px;
+
+    background: #1e293b;
+
+    color: #94a3b8;
+
+    font-size: 12px;
+}
+
+.install {
+    width: 100%;
+
+    padding: 12px;
+
+    border: 0;
+
+    border-radius: 11px;
+
+    background: white;
+
+    color: #0f172a;
+
+    font-size: 15px;
+
+    font-weight: bold;
+
+    cursor: pointer;
+}
+
+.install:hover {
+    background: #e2e8f0;
+}
+
+.install.installed {
+    background: #17351f;
+
+    color: #86efac;
+
+    cursor: default;
+}
+
+.install:disabled {
+    opacity: 0.9;
+}
+
+.terminal {
+    margin-top: 30px;
+
+    overflow: hidden;
+
+    border:
+        1px solid #334155;
+
+    border-radius: 14px;
+
+    background: #020617;
+}
+
+.terminal-header {
+    padding: 13px 16px;
+
+    background: #111827;
+
+    border-bottom:
+        1px solid #334155;
+
+    color: #cbd5e1;
+}
+
+#output {
+    height: 320px;
+
+    overflow: auto;
+
+    margin: 0;
+
+    padding: 18px;
+
+    white-space: pre-wrap;
+
+    font-family: monospace;
+
+    font-size: 13px;
+
+    color: #d1d5db;
+}
+
+.hidden {
+    display: none;
+}
+
+@media (max-width: 600px) {
+
+    .online {
+        display: none;
+    }
+
+    .hero h2 {
+        font-size: 25px;
+    }
+
+}
