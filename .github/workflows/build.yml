@@ -1,0 +1,51 @@
+name: Build Nova Pi Store
+
+on:
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+permissions:
+
+  contents: read
+
+
+jobs:
+
+  build:
+
+    name: Build Debian Package
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Install Debian tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+
+
+      - name: Build package
+        run: |
+          chmod +x scripts/build-deb.sh
+          ./scripts/build-deb.sh 1.0.0
+
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: nova-pi-store-deb
+
+          path: "*.deb"
