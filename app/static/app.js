@@ -1,8 +1,8 @@
 const search =
     document.getElementById("search");
 
-const apps =
-    document.querySelectorAll(".app-card");
+const appsContainer =
+    document.getElementById("apps");
 
 const categories =
     document.getElementById("categories");
@@ -13,18 +13,28 @@ const terminal =
 const output =
     document.getElementById("output");
 
+const installedCount =
+    document.getElementById("installed-count");
+
 
 let selectedCategory = "Alle";
 
+let appCards = [];
+
+
+// ============================================================
+// KATEGORIEN
+// ============================================================
 
 function createCategories() {
 
-    const categorySet = new Set();
+    const categorySet =
+        new Set();
 
-    apps.forEach(app => {
+    appCards.forEach(card => {
 
         categorySet.add(
-            app.dataset.category
+            card.dataset.category
         );
 
     });
@@ -44,12 +54,14 @@ function createCategories() {
         button.dataset.category =
             category;
 
+
         button.addEventListener(
             "click",
             () => {
 
                 selectedCategory =
                     category;
+
 
                 document
                     .querySelectorAll(
@@ -63,14 +75,17 @@ function createCategories() {
 
                     });
 
+
                 button.classList.add(
                     "active"
                 );
+
 
                 filterApps();
 
             }
         );
+
 
         categories.appendChild(
             button
@@ -80,6 +95,10 @@ function createCategories() {
 }
 
 
+// ============================================================
+// SUCHE / FILTER
+// ============================================================
+
 function filterApps() {
 
     const query =
@@ -88,16 +107,16 @@ function filterApps() {
             .toLowerCase();
 
 
-    apps.forEach(app => {
+    appCards.forEach(card => {
 
         const name =
-            app.dataset.name;
+            card.dataset.name;
 
         const description =
-            app.dataset.description;
+            card.dataset.description;
 
         const category =
-            app.dataset.category;
+            card.dataset.category;
 
 
         const matchesSearch =
@@ -110,7 +129,7 @@ function filterApps() {
             category === selectedCategory;
 
 
-        app.style.display =
+        card.style.display =
             matchesSearch &&
             matchesCategory
                 ? ""
@@ -126,17 +145,60 @@ search.addEventListener(
 );
 
 
-async function installApp(
+// ============================================================
+// APP AKTION
+// ============================================================
+
+async function performAction(
     appId,
-    button
+    action
 ) {
 
-    if (
-        !confirm(
-            "Diese App auf dem Raspberry Pi installieren?"
-        )
-    ) {
+    const card =
+        document.querySelector(
+            `.app-card[data-id="${appId}"]`
+        );
+
+
+    if (!card) {
         return;
+    }
+
+
+    const buttons =
+        card.querySelectorAll(
+            "button"
+        );
+
+
+    buttons.forEach(button => {
+        button.disabled = true;
+    });
+
+
+    const actionButton =
+        card.querySelector(
+            `.action-${action}`
+        );
+
+
+    if (actionButton) {
+
+        if (action === "install") {
+            actionButton.textContent =
+                "Installation läuft...";
+        }
+
+        if (action === "remove") {
+            actionButton.textContent =
+                "Deinstallation läuft...";
+        }
+
+        if (action === "update") {
+            actionButton.textContent =
+                "Update läuft...";
+        }
+
     }
 
 
@@ -146,20 +208,14 @@ async function installApp(
 
 
     output.textContent =
-        "Installation wird gestartet...\n";
-
-
-    button.disabled = true;
-
-    button.textContent =
-        "Installation läuft...";
+        "Aktion wird gestartet...\n";
 
 
     try {
 
         const response =
             await fetch(
-                `/api/install/${appId}`,
+                `/api/${action}/${appId}`,
                 {
                     method: "POST"
                 }
@@ -176,18 +232,21 @@ async function installApp(
                 "\nFEHLER: " +
                 result.error;
 
-            button.disabled = false;
 
-            button.textContent =
-                "Erneut versuchen";
+            buttons.forEach(button => {
+                button.disabled = false;
+            });
+
 
             return;
         }
 
 
         pollStatus(
-            button
+            appId,
+            action
         );
+
 
     } catch (error) {
 
@@ -195,16 +254,22 @@ async function installApp(
             "\nVerbindungsfehler: " +
             error;
 
-        button.disabled = false;
 
-        button.textContent =
-            "Erneut versuchen";
+        buttons.forEach(button => {
+            button.disabled = false;
+        });
+
     }
 }
 
 
+// ============================================================
+// STATUS ABFRAGEN
+// ============================================================
+
 async function pollStatus(
-    button
+    appId,
+    action
 ) {
 
     try {
@@ -230,7 +295,10 @@ async function pollStatus(
         if (status.running) {
 
             setTimeout(
-                () => pollStatus(button),
+                () => pollStatus(
+                    appId,
+                    action
+                ),
                 1000
             );
 
@@ -240,34 +308,148 @@ async function pollStatus(
 
         if (status.success) {
 
-            button.textContent =
-                "✓ Installiert";
+            output.textContent +=
+                "\n✓ Vorgang erfolgreich abgeschlossen.";
 
-            button.classList.add(
-                "installed"
+
+            setTimeout(
+                () => {
+                    location.reload();
+                },
+                1000
             );
 
-            button.disabled =
-                true;
 
         } else {
 
-            button.textContent =
-                "Erneut versuchen";
+            const card =
+                document.querySelector(
+                    `.app-card[data-id="${appId}"]`
+                );
 
-            button.disabled =
-                false;
+
+            if (card) {
+
+                card
+                    .querySelectorAll("button")
+                    .forEach(button => {
+
+                        button.disabled =
+                            false;
+
+                    });
+
+            }
 
         }
 
-    } catch {
+
+    } catch (error) {
 
         setTimeout(
-            () => pollStatus(button),
+            () => pollStatus(
+                appId,
+                action
+            ),
             1500
         );
+
     }
 }
 
 
+// ============================================================
+// BESTÄTIGUNG
+// ============================================================
+
+function installApp(appId) {
+
+    if (
+        !confirm(
+            "Diese App auf dem Raspberry Pi installieren?"
+        )
+    ) {
+        return;
+    }
+
+
+    performAction(
+        appId,
+        "install"
+    );
+}
+
+
+function removeApp(appId) {
+
+    if (
+        !confirm(
+            "Diese App wirklich deinstallieren?"
+        )
+    ) {
+        return;
+    }
+
+
+    performAction(
+        appId,
+        "remove"
+    );
+}
+
+
+function updateApp(appId) {
+
+    if (
+        !confirm(
+            "Diese App aktualisieren?"
+        )
+    ) {
+        return;
+    }
+
+
+    performAction(
+        appId,
+        "update"
+    );
+}
+
+
+// ============================================================
+// INSTALLIERTE APPS
+// ============================================================
+
+function updateInstalledCount() {
+
+    const installed =
+        appCards.filter(card =>
+            card.dataset.installed === "true"
+        ).length;
+
+
+    if (installedCount) {
+
+        installedCount.textContent =
+            installed;
+
+    }
+}
+
+
+// ============================================================
+// START
+// ============================================================
+
+appCards = [
+    ...document.querySelectorAll(
+        ".app-card"
+    )
+];
+
+
 createCategories();
+
+filterApps();
+
+updateInstalledCount();
