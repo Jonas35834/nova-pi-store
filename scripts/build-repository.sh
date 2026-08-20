@@ -2,7 +2,7 @@
 
 set -e
 
-VERSION="${1:-1.0.0}"
+VERSION="${1:-1.1.0}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -19,27 +19,31 @@ echo "Version: $VERSION"
 echo
 
 
-# --------------------------------------------------
+# ============================================================
 # Repository löschen
-# --------------------------------------------------
+# ============================================================
+
+echo "[1/8] Lösche altes Repository..."
 
 rm -rf "$REPO"
 
 
-# --------------------------------------------------
-# Verzeichnisstruktur erstellen
-# --------------------------------------------------
+# ============================================================
+# Verzeichnisstruktur
+# ============================================================
+
+echo "[2/8] Erstelle Repository-Struktur..."
 
 mkdir -p \
     "$REPO/pool/main" \
     "$REPO/dists/stable/main/binary-all"
 
 
-# --------------------------------------------------
+# ============================================================
 # Debian-Paket kopieren
-# --------------------------------------------------
+# ============================================================
 
-echo "[1/6] Kopiere Debian-Paket..."
+echo "[3/8] Kopiere Debian-Paket..."
 
 if [ ! -f "$DEB" ]; then
 
@@ -58,20 +62,11 @@ cp \
     "$REPO/pool/main/"
 
 
-# --------------------------------------------------
-# Paketinformationen lesen
-# --------------------------------------------------
+# ============================================================
+# Paketinformationen
+# ============================================================
 
-echo "[2/6] Lese Paketinformationen..."
-
-PACKAGE_INFO=$(dpkg-deb -f "$DEB")
-
-
-# --------------------------------------------------
-# Packages-Datei erzeugen
-# --------------------------------------------------
-
-echo "[3/6] Erstelle Packages-Datei..."
+echo "[4/8] Lese Paketinformationen..."
 
 python3 <<PY
 
@@ -112,10 +107,7 @@ sha256 = subprocess.check_output(
 ).split()[0]
 
 
-relative = (
-    "pool/main/" +
-    deb.name
-)
+relative = "pool/main/" + deb.name
 
 
 packages = f"""Package: {fields["Package"]}
@@ -153,40 +145,65 @@ print(packages)
 PY
 
 
-# --------------------------------------------------
-# Packages komprimieren
-# --------------------------------------------------
+# ============================================================
+# Packages.gz
+# ============================================================
 
-echo "[4/6] Komprimiere Packages..."
+echo "[5/8] Erstelle Packages.gz..."
 
 gzip \
     -9 \
-    -k \
-    "$REPO/dists/stable/main/binary-all/Packages"
+    -c \
+    "$REPO/dists/stable/main/binary-all/Packages" \
+    > "$REPO/dists/stable/main/binary-all/Packages.gz"
 
 
-# --------------------------------------------------
-# Release-Datei
-# --------------------------------------------------
+# ============================================================
+# Release-Datei vorbereiten
+# ============================================================
 
-echo "[5/6] Erstelle Release-Datei..."
+echo "[6/8] Erstelle Release-Datei..."
 
-cat > "$REPO/dists/stable/Release" <<EOF
+cd "$REPO/dists/stable"
+
+
+DATE="$(date -Ru)"
+
+PACKAGES_SIZE=$(stat -c%s main/binary-all/Packages)
+PACKAGES_GZ_SIZE=$(stat -c%s main/binary-all/Packages.gz)
+
+PACKAGES_MD5=$(md5sum main/binary-all/Packages | awk '{print $1}')
+PACKAGES_GZ_MD5=$(md5sum main/binary-all/Packages.gz | awk '{print $1}')
+
+PACKAGES_SHA256=$(sha256sum main/binary-all/Packages | awk '{print $1}')
+PACKAGES_GZ_SHA256=$(sha256sum main/binary-all/Packages.gz | awk '{print $1}')
+
+
+cat > Release <<EOF
 Origin: Nova Pi Store
 Label: Nova Pi Store
 Suite: stable
 Codename: stable
+Date: $DATE
 Architectures: all
 Components: main
 Description: Nova Pi Store APT Repository
+
+MD5Sum:
+ $PACKAGES_MD5 $PACKAGES_SIZE main/binary-all/Packages
+ $PACKAGES_GZ_MD5 $PACKAGES_GZ_SIZE main/binary-all/Packages.gz
+
+SHA256:
+ $PACKAGES_SHA256 $PACKAGES_SIZE main/binary-all/Packages
+ $PACKAGES_GZ_SHA256 $PACKAGES_GZ_SIZE main/binary-all/Packages.gz
 EOF
 
 
-# --------------------------------------------------
+# ============================================================
 # Installer kopieren
-# --------------------------------------------------
+# ============================================================
 
-echo "[6/6] Kopiere Installer..."
+echo "[7/8] Kopiere Installer..."
 
 if [ ! -f "$ROOT/scripts/install.sh" ]; then
 
@@ -209,22 +226,26 @@ chmod 755 \
     "$REPO/install.sh"
 
 
-# --------------------------------------------------
+# ============================================================
 # Übersicht
-# --------------------------------------------------
+# ============================================================
 
 echo
-echo "======================================"
-echo "Repository erfolgreich erstellt"
-echo "======================================"
+echo "[8/8] Repository prüfen..."
 echo
+
+cd "$ROOT"
 
 find "$REPO" \
     -type f \
     -print \
     | sort
 
+
 echo
 echo "======================================"
-echo "Fertig"
+echo "Repository erfolgreich erstellt"
 echo "======================================"
+echo
+echo "Version: $VERSION"
+echo
