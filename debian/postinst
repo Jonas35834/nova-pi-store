@@ -6,6 +6,10 @@ set -e
 echo "Installing Nova Pi Store..."
 
 
+# ============================================================
+# Benutzer erstellen
+# ============================================================
+
 if ! id nova-store >/dev/null 2>&1; then
 
     useradd \
@@ -17,10 +21,16 @@ if ! id nova-store >/dev/null 2>&1; then
 fi
 
 
-mkdir -p /opt/nova-pi-store
+# ============================================================
+# Anwendung installieren
+# ============================================================
+
+mkdir -p \
+    /opt/nova-pi-store
 
 
-rm -rf /opt/nova-pi-store/app
+rm -rf \
+    /opt/nova-pi-store/app
 
 
 cp -r \
@@ -32,6 +42,10 @@ chown -R \
     nova-store:nova-store \
     /opt/nova-pi-store
 
+
+# ============================================================
+# Install-Wrapper
+# ============================================================
 
 cat > /usr/local/bin/nova-pi-store-install <<'EOF'
 #!/bin/sh
@@ -65,14 +79,96 @@ chmod 755 \
     /usr/local/bin/nova-pi-store-install
 
 
+# ============================================================
+# Remove-Wrapper
+# ============================================================
+
+cat > /usr/local/bin/nova-pi-store-remove <<'EOF'
+#!/bin/sh
+
+set -e
+
+if [ "$#" -eq 0 ]; then
+    echo "Keine Pakete angegeben."
+    exit 1
+fi
+
+for package in "$@"; do
+
+    case "$package" in
+
+        ''|*[!a-zA-Z0-9.+_-]*)
+            echo "Ungültiger Paketname: $package"
+            exit 1
+            ;;
+
+    esac
+
+done
+
+exec /usr/bin/apt-get remove -y "$@"
+
+EOF
+
+
+chmod 755 \
+    /usr/local/bin/nova-pi-store-remove
+
+
+# ============================================================
+# Update-Wrapper
+# ============================================================
+
+cat > /usr/local/bin/nova-pi-store-update <<'EOF'
+#!/bin/sh
+
+set -e
+
+if [ "$#" -eq 0 ]; then
+    echo "Keine Pakete angegeben."
+    exit 1
+fi
+
+for package in "$@"; do
+
+    case "$package" in
+
+        ''|*[!a-zA-Z0-9.+_-]*)
+            echo "Ungültiger Paketname: $package"
+            exit 1
+            ;;
+
+    esac
+
+done
+
+exec /usr/bin/apt-get install --only-upgrade -y "$@"
+
+EOF
+
+
+chmod 755 \
+    /usr/local/bin/nova-pi-store-update
+
+
+# ============================================================
+# Sudo-Berechtigungen
+# ============================================================
+
 cat > /etc/sudoers.d/nova-pi-store <<'EOF'
 nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-install *
+nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-remove *
+nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-update *
 EOF
 
 
 chmod 440 \
     /etc/sudoers.d/nova-pi-store
 
+
+# ============================================================
+# Service starten
+# ============================================================
 
 systemctl daemon-reload
 
