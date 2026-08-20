@@ -2,8 +2,10 @@
 
 set -e
 
-
-echo "Installing Nova Pi Store..."
+echo "======================================"
+echo "Nova Pi Store Installer"
+echo "======================================"
+echo
 
 
 # ============================================================
@@ -12,11 +14,17 @@ echo "Installing Nova Pi Store..."
 
 if ! id nova-store >/dev/null 2>&1; then
 
+    echo "[1/7] Erstelle Benutzer nova-store..."
+
     useradd \
         --system \
         --home /opt/nova-pi-store \
         --shell /usr/sbin/nologin \
         nova-store
+
+else
+
+    echo "[1/7] Benutzer nova-store existiert bereits."
 
 fi
 
@@ -24,6 +32,8 @@ fi
 # ============================================================
 # Anwendung installieren
 # ============================================================
+
+echo "[2/7] Installiere Nova Pi Store..."
 
 mkdir -p \
     /opt/nova-pi-store
@@ -46,6 +56,8 @@ chown -R \
 # ============================================================
 # Install-Wrapper
 # ============================================================
+
+echo "[3/7] Erstelle Installations-Wrapper..."
 
 cat > /usr/local/bin/nova-pi-store-install <<'EOF'
 #!/bin/sh
@@ -70,6 +82,9 @@ for package in "$@"; do
 
 done
 
+echo "Installiere: $*"
+echo
+
 exec /usr/bin/apt-get install -y "$@"
 
 EOF
@@ -82,6 +97,8 @@ chmod 755 \
 # ============================================================
 # Remove-Wrapper
 # ============================================================
+
+echo "[4/7] Erstelle Deinstallations-Wrapper..."
 
 cat > /usr/local/bin/nova-pi-store-remove <<'EOF'
 #!/bin/sh
@@ -106,6 +123,9 @@ for package in "$@"; do
 
 done
 
+echo "Deinstalliere: $*"
+echo
+
 exec /usr/bin/apt-get remove -y "$@"
 
 EOF
@@ -118,6 +138,8 @@ chmod 755 \
 # ============================================================
 # Update-Wrapper
 # ============================================================
+
+echo "[5/7] Erstelle Update-Wrapper..."
 
 cat > /usr/local/bin/nova-pi-store-update <<'EOF'
 #!/bin/sh
@@ -142,6 +164,9 @@ for package in "$@"; do
 
 done
 
+echo "Aktualisiere: $*"
+echo
+
 exec /usr/bin/apt-get install --only-upgrade -y "$@"
 
 EOF
@@ -155,6 +180,8 @@ chmod 755 \
 # Sudo-Berechtigungen
 # ============================================================
 
+echo "[6/7] Konfiguriere Berechtigungen..."
+
 cat > /etc/sudoers.d/nova-pi-store <<'EOF'
 nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-install *
 nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-remove *
@@ -166,9 +193,21 @@ chmod 440 \
     /etc/sudoers.d/nova-pi-store
 
 
+# Sudo-Konfiguration überprüfen
+
+if command -v visudo >/dev/null 2>&1; then
+
+    visudo \
+        -cf /etc/sudoers.d/nova-pi-store
+
+fi
+
+
 # ============================================================
 # Service starten
 # ============================================================
+
+echo "[7/7] Starte Nova Pi Store..."
 
 systemctl daemon-reload
 
@@ -178,7 +217,12 @@ systemctl restart nova-pi-store.service || true
 
 
 echo
-echo "Nova Pi Store installation complete."
+echo "======================================"
+echo "Nova Pi Store installation complete!"
+echo "======================================"
+echo
+echo "Weboberfläche:"
+echo "http://<RASPBERRY-PI-IP>:8080"
 echo
 
 exit 0
