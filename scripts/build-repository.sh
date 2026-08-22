@@ -2,13 +2,14 @@
 
 set -e
 
-VERSION="${1:-1.1.0}"
+VERSION="${1:-1.1.1}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 REPO="$ROOT/apt-repository"
 
 DEB="$ROOT/nova-pi-store_${VERSION}_all.deb"
+
 
 echo
 echo "======================================"
@@ -40,10 +41,10 @@ mkdir -p \
 
 
 # ============================================================
-# Debian-Paket kopieren
+# Debian-Paket prüfen
 # ============================================================
 
-echo "[3/8] Kopiere Debian-Paket..."
+echo "[3/8] Prüfe Debian-Paket..."
 
 if [ ! -f "$DEB" ]; then
 
@@ -57,6 +58,17 @@ if [ ! -f "$DEB" ]; then
 
 fi
 
+
+echo
+echo "Paket:"
+echo "$DEB"
+echo
+
+
+# ============================================================
+# Debian-Paket kopieren
+# ============================================================
+
 cp \
     "$DEB" \
     "$REPO/pool/main/"
@@ -68,118 +80,143 @@ cp \
 
 echo "[4/8] Lese Paketinformationen..."
 
-python3 <<PY
 
-import subprocess
-from pathlib import Path
-
-deb = Path("$DEB")
-repo = Path("$REPO")
-
-output = subprocess.check_output(
-    ["dpkg-deb", "-f", str(deb)],
-    text=True
+PACKAGE_NAME=$(
+    dpkg-deb -f "$DEB" Package
 )
 
-fields = {}
+PACKAGE_VERSION=$(
+    dpkg-deb -f "$DEB" Version
+)
 
-for line in output.splitlines():
+PACKAGE_ARCHITECTURE=$(
+    dpkg-deb -f "$DEB" Architecture
+)
 
-    if ": " in line:
+PACKAGE_MAINTAINER=$(
+    dpkg-deb -f "$DEB" Maintainer
+)
 
-        key, value = line.split(": ", 1)
+PACKAGE_SECTION=$(
+    dpkg-deb -f "$DEB" Section
+)
 
-        fields[key] = value
+PACKAGE_PRIORITY=$(
+    dpkg-deb -f "$DEB" Priority
+)
 
+PACKAGE_DEPENDS=$(
+    dpkg-deb -f "$DEB" Depends
+)
 
-size = deb.stat().st_size
-
-
-md5 = subprocess.check_output(
-    ["md5sum", str(deb)],
-    text=True
-).split()[0]
-
-
-sha256 = subprocess.check_output(
-    ["sha256sum", str(deb)],
-    text=True
-).split()[0]
-
-
-relative = "pool/main/" + deb.name
-
-
-packages = f"""Package: {fields["Package"]}
-Version: {fields["Version"]}
-Architecture: {fields["Architecture"]}
-Maintainer: {fields["Maintainer"]}
-Installed-Size: {fields.get("Installed-Size", "")}
-Depends: {fields.get("Depends", "")}
-Section: {fields.get("Section", "")}
-Priority: {fields.get("Priority", "")}
-Filename: {relative}
-Size: {size}
-MD5sum: {md5}
-SHA256: {sha256}
-Description: {fields.get("Description", "")}
-
-"""
-
-
-packages_file = (
-    repo /
-    "dists/stable/main/binary-all/Packages"
+PACKAGE_DESCRIPTION=$(
+    dpkg-deb -f "$DEB" Description
 )
 
 
-packages_file.write_text(
-    packages,
-    encoding="utf-8"
+# ============================================================
+# Prüfen
+# ============================================================
+
+echo
+echo "Package: $PACKAGE_NAME"
+echo "Version: $PACKAGE_VERSION"
+echo "Architecture: $PACKAGE_ARCHITECTURE"
+echo
+
+
+if [ "$PACKAGE_ARCHITECTURE" != "all" ]; then
+
+    echo
+    echo "FEHLER:"
+    echo "Das Nova Pi Store Paket muss Architecture: all verwenden."
+    echo
+
+    exit 1
+
+fi
+
+
+# ============================================================
+# Hashes
+# ============================================================
+
+echo "[5/8] Berechne Paket-Hashes..."
+
+
+SIZE=$(
+    stat -c%s "$DEB"
+)
+
+MD5=$(
+    md5sum "$DEB" | awk '{print $1}'
+)
+
+SHA256=$(
+    sha256sum "$DEB" | awk '{print $1}'
 )
 
 
-print()
-print(packages)
+FILENAME="pool/main/$(basename "$DEB")"
 
-PY
+
+# ============================================================
+# Packages-Datei
+# ============================================================
+
+echo "[6/8] Erstelle Packages-Datei..."
+
+
+PACKAGES_DIR="$REPO/dists/stable/main/binary-all"
+
+PACKAGES_FILE="$PACKAGES_DIR/Packages"
+
+
+cat > "$PACKAGES_FILE" <<EOF
+Package: $PACKAGE_NAME
+Version: $PACKAGE_VERSION
+Architecture: $PACKAGE_ARCHITECTURE
+Maintainer: $PACKAGE_MAINTAINER
+Installed-Size: $(dpkg-deb -f "$DEB" Installed-Size)
+Depends: $PACKAGE_DEPENDS
+Section: $PACKAGE_SECTION
+Priority: $PACKAGE_PRIORITY
+Filename: $FILENAME
+Size: $SIZE
+MD5sum: $MD5
+SHA256: $SHA256
+Description: $PACKAGE_DESCRIPTION
+
+EOF
 
 
 # ============================================================
 # Packages.gz
 # ============================================================
 
-echo "[5/8] Erstelle Packages.gz..."
+echo "[7/8] Erstelle Packages.gz..."
+
 
 gzip \
     -9 \
-    -c \
-    "$REPO/dists/stable/main/binary-all/Packages" \
-    > "$REPO/dists/stable/main/binary-all/Packages.gz"
+    -c "$PACKAGES_FILE" \
+    > "$PACKAGES_DIR/Packages.gz"
 
 
 # ============================================================
-# Release-Datei vorbereiten
+# Release-Datei
 # ============================================================
 
-echo "[6/8] Erstelle Release-Datei..."
-
-cd "$REPO/dists/stable"
+echo "[8/8] Erstelle Release-Datei..."
 
 
-DATE="$(date -Ru)"
-
-PACKAGES_SIZE=$(stat -c%s main/binary-all/Packages)
-PACKAGES_GZ_SIZE=$(stat -c%s main/binary-all/Packages.gz)
-
-PACKAGES_MD5=$(md5sum main/binary-all/Packages | awk '{print $1}')
-PACKAGES_GZ_MD5=$(md5sum main/binary-all/Packages.gz | awk '{print $1}')
-
-PACKAGES_SHA256=$(sha256sum main/binary-all/Packages | awk '{print $1}')
-PACKAGES_GZ_SHA256=$(sha256sum main/binary-all/Packages.gz | awk '{print $1}')
+RELEASE_FILE="$REPO/dists/stable/Release"
 
 
-cat > Release <<EOF
+DATE=$(date -Ru)
+
+
+cat > "$RELEASE_FILE" <<EOF
 Origin: Nova Pi Store
 Label: Nova Pi Store
 Suite: stable
@@ -188,22 +225,12 @@ Date: $DATE
 Architectures: all
 Components: main
 Description: Nova Pi Store APT Repository
-
-MD5Sum:
- $PACKAGES_MD5 $PACKAGES_SIZE main/binary-all/Packages
- $PACKAGES_GZ_MD5 $PACKAGES_GZ_SIZE main/binary-all/Packages.gz
-
-SHA256:
- $PACKAGES_SHA256 $PACKAGES_SIZE main/binary-all/Packages
- $PACKAGES_GZ_SHA256 $PACKAGES_GZ_SIZE main/binary-all/Packages.gz
 EOF
 
 
 # ============================================================
-# Installer kopieren
+# Installer
 # ============================================================
-
-echo "[7/8] Kopiere Installer..."
 
 if [ ! -f "$ROOT/scripts/install.sh" ]; then
 
@@ -231,10 +258,10 @@ chmod 755 \
 # ============================================================
 
 echo
-echo "[8/8] Repository prüfen..."
+echo "======================================"
+echo "Repository erfolgreich erstellt"
+echo "======================================"
 echo
-
-cd "$ROOT"
 
 find "$REPO" \
     -type f \
@@ -244,8 +271,23 @@ find "$REPO" \
 
 echo
 echo "======================================"
-echo "Repository erfolgreich erstellt"
+echo "Packages"
 echo "======================================"
 echo
-echo "Version: $VERSION"
+
+cat "$PACKAGES_FILE"
+
+
 echo
+echo "======================================"
+echo "Release"
+echo "======================================"
+echo
+
+cat "$RELEASE_FILE"
+
+
+echo
+echo "======================================"
+echo "Fertig"
+echo "======================================"
