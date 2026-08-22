@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Nova Pi Store</title>
+
+    <link
+        rel="stylesheet"
+        href="/style.css"
+    >
+
+</head>
+
+<body>
+
+    <header class="header">
+
+        <div>
+
+            <h1>🍓 Nova Pi Store</h1>
+
+            <p>
+                Raspberry-Pi-Software verwalten
+            </p>
+
+        </div>
+
+        <div
+            id="serverStatus"
+            class="status"
+        >
+            Verbindung wird geprüft...
+        </div>
+
+    </header>
+
+
+    <main>
+
+        <section class="dashboard">
+
+            <div class="card">
+
+                <span class="card-title">
+                    Server
+                </span>
+
+                <strong id="serverName">
+                    Nova Pi Store
+                </strong>
+
+            </div>
+
+
+            <div class="card">
+
+                <span class="card-title">
+                    Raspberry Pis
+                </span>
+
+                <strong id="agentCount">
+                    0
+                </strong>
+
+            </div>
+
+
+            <div class="card">
+
+                <span class="card-title">
+                    Aufgaben
+                </span>
+
+                <strong id="taskCount">
+                    0
+                </strong>
+
+            </div>
+
+        </section>
+
+
+        <section>
+
+            <div class="section-header">
+
+                <h2>🖥️ Raspberry Pis</h2>
+
+                <button
+                    onclick="loadAgents()"
+                    class="button"
+                >
+                    Aktualisieren
+                </button>
+
+            </div>
+
+            <div
+                id="agents"
+                class="grid"
+            >
+
+                <div class="empty">
+                    Keine Raspberry Pis verbunden.
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <section>
+
+            <div class="section-header">
+
+                <h2>📦 Apps</h2>
+
+                <button
+                    onclick="loadStore()"
+                    class="button"
+                >
+                    Aktualisieren
+                </button>
+
+            </div>
+
+            <div
+                id="apps"
+                class="grid"
+            >
+
+                <div class="empty">
+                    Apps werden geladen...
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <section>
+
+            <div class="section-header">
+
+                <h2>📋 Aufgaben</h2>
+
+                <button
+                    onclick="loadTasks()"
+                    class="button"
+                >
+                    Aktualisieren
+                </button>
+
+            </div>
+
+            <div
+                id="tasks"
+                class="tasks"
+            >
+
+                <div class="empty">
+                    Keine Aufgaben.
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <script src="/script.js"></script>
+
+</body>
+
+</html>
