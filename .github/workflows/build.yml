@@ -2,9 +2,21 @@ name: Build Nova Pi Store
 
 on:
 
+  # ------------------------------------------------------------
+  # Nur starten, wenn VERSION geändert wurde
+  # ------------------------------------------------------------
+
   push:
     branches:
       - main
+
+    paths:
+      - "VERSION"
+
+
+  # ------------------------------------------------------------
+  # Manueller Start weiterhin möglich
+  # ------------------------------------------------------------
 
   workflow_dispatch:
 
@@ -19,12 +31,78 @@ permissions:
 jobs:
 
   # ============================================================
+  # VERSION
+  # ============================================================
+
+  version:
+
+    name: Read Version
+
+    runs-on: ubuntu-latest
+
+    outputs:
+
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+
+      - name: Checkout repository
+
+        uses: actions/checkout@v4
+
+
+      - name: Read VERSION
+
+        id: version
+
+        run: |
+
+          if [ ! -f VERSION ]; then
+
+            echo "FEHLER: VERSION Datei nicht gefunden."
+
+            exit 1
+
+          fi
+
+
+          VERSION="$(cat VERSION | tr -d '[:space:]')"
+
+
+          if [ -z "$VERSION" ]; then
+
+            echo "FEHLER: VERSION ist leer."
+
+            exit 1
+
+          fi
+
+
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+
+            echo "FEHLER: Ungültige Version: $VERSION"
+
+            echo "Erwartetes Format: 1.2.3"
+
+            exit 1
+
+          fi
+
+
+          echo "Version: $VERSION"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+
+  # ============================================================
   # BUILD
   # ============================================================
 
   build:
 
     name: Build Debian Package and APT Repository
+
+    needs: version
 
     runs-on: ubuntu-latest
 
@@ -40,16 +118,29 @@ jobs:
 
 
       # ----------------------------------------------------------
+      # Version anzeigen
+      # ----------------------------------------------------------
+
+      - name: Show version
+
+        run: |
+
+          echo "======================================"
+
+          echo "Nova Pi Store"
+
+          echo "Version: ${{ needs.version.outputs.version }}"
+
+          echo "======================================"
+
+
+      # ----------------------------------------------------------
       # Projektstruktur
       # ----------------------------------------------------------
 
       - name: Check project structure
 
         run: |
-
-          echo "======================================"
-          echo "Project structure"
-          echo "======================================"
 
           find . \
             -maxdepth 4 \
@@ -77,7 +168,9 @@ jobs:
         run: |
 
           chmod +x scripts/build-deb.sh
+
           chmod +x scripts/build-repository.sh
+
           chmod +x scripts/install.sh
 
 
@@ -89,7 +182,8 @@ jobs:
 
         run: |
 
-          ./scripts/build-deb.sh 1.1.1
+          ./scripts/build-deb.sh \
+            "${{ needs.version.outputs.version }}"
 
 
       # ----------------------------------------------------------
@@ -100,14 +194,10 @@ jobs:
 
         run: |
 
-          echo
           echo "Generated package:"
-          echo
 
           ls -lh *.deb
 
-          echo
-          echo "Package information:"
           echo
 
           dpkg-deb --info *.deb
@@ -121,7 +211,8 @@ jobs:
 
         run: |
 
-          ./scripts/build-repository.sh 1.1.1
+          ./scripts/build-repository.sh \
+            "${{ needs.version.outputs.version }}"
 
 
       # ----------------------------------------------------------
@@ -132,29 +223,25 @@ jobs:
 
         run: |
 
-          echo
           echo "APT repository:"
-          echo
 
           find apt-repository \
             -type f \
             -print \
             | sort
 
+
           echo
-          echo "--------------------------------------"
-          echo "Release"
-          echo "--------------------------------------"
-          echo
+
+          echo "Release:"
 
           cat \
             apt-repository/dists/stable/Release
 
+
           echo
-          echo "--------------------------------------"
-          echo "Packages"
-          echo "--------------------------------------"
-          echo
+
+          echo "Packages:"
 
           cat \
             apt-repository/dists/stable/main/binary-all/Packages
@@ -204,13 +291,13 @@ jobs:
 
         with:
 
-          tag_name: v1.1.1
+          tag_name: v${{ needs.version.outputs.version }}
 
-          name: Nova Pi Store v1.1.1
+          name: Nova Pi Store v${{ needs.version.outputs.version }}
 
           body: |
 
-            # 🍓 Nova Pi Store v1.1.1
+            # 🍓 Nova Pi Store v${{ needs.version.outputs.version }}
 
             Nova Pi Store für Raspberry Pi OS Lite.
 
@@ -237,9 +324,12 @@ jobs:
 
     name: Deploy GitHub Pages
 
-    needs: build
+    needs:
+      - version
+      - build
 
     runs-on: ubuntu-latest
+
 
     environment:
 
@@ -283,7 +373,11 @@ jobs:
         run: |
 
           echo "======================================"
+
           echo "Preparing GitHub Pages"
+
+          echo "Version: ${{ needs.version.outputs.version }}"
+
           echo "======================================"
 
 
@@ -323,7 +417,7 @@ jobs:
 
 
           # ------------------------------------------------------
-          # apps.json veröffentlichen
+          # apps.json
           # ------------------------------------------------------
 
           if [ -f app/apps.json ]; then
@@ -342,14 +436,19 @@ jobs:
 
 
           # ------------------------------------------------------
+          # VERSION
+          # ------------------------------------------------------
+
+          cp VERSION pages/VERSION
+
+
+          # ------------------------------------------------------
           # Übersicht
           # ------------------------------------------------------
 
           echo
-          echo "======================================"
-          echo "GitHub Pages structure"
-          echo "======================================"
-          echo
+
+          echo "GitHub Pages structure:"
 
           find pages \
             -type f \
