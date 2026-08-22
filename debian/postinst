@@ -14,7 +14,7 @@ echo
 
 if ! id nova-store >/dev/null 2>&1; then
 
-    echo "[1/7] Erstelle Benutzer nova-store..."
+    echo "[1/8] Erstelle Benutzer nova-store..."
 
     useradd \
         --system \
@@ -24,7 +24,7 @@ if ! id nova-store >/dev/null 2>&1; then
 
 else
 
-    echo "[1/7] Benutzer nova-store existiert bereits."
+    echo "[1/8] Benutzer nova-store existiert bereits."
 
 fi
 
@@ -33,7 +33,7 @@ fi
 # Anwendung installieren
 # ============================================================
 
-echo "[2/7] Installiere Nova Pi Store..."
+echo "[2/8] Installiere Nova Pi Store..."
 
 mkdir -p \
     /opt/nova-pi-store
@@ -43,8 +43,17 @@ rm -rf \
     /opt/nova-pi-store/app
 
 
+rm -rf \
+    /opt/nova-pi-store/agent
+
+
 cp -r \
     /usr/share/nova-pi-store/app \
+    /opt/nova-pi-store/
+
+
+cp -r \
+    /usr/share/nova-pi-store/agent \
     /opt/nova-pi-store/
 
 
@@ -54,10 +63,24 @@ chown -R \
 
 
 # ============================================================
+# Agent-Verzeichnis
+# ============================================================
+
+echo "[3/8] Erstelle Agent-Datenverzeichnis..."
+
+mkdir -p \
+    /var/lib/nova-pi-store
+
+
+chmod 700 \
+    /var/lib/nova-pi-store
+
+
+# ============================================================
 # Install-Wrapper
 # ============================================================
 
-echo "[3/7] Erstelle Installations-Wrapper..."
+echo "[4/8] Erstelle Installations-Wrapper..."
 
 cat > /usr/local/bin/nova-pi-store-install <<'EOF'
 #!/bin/sh
@@ -72,12 +95,10 @@ fi
 for package in "$@"; do
 
     case "$package" in
-
         ''|*[!a-zA-Z0-9.+_-]*)
             echo "Ungültiger Paketname: $package"
             exit 1
             ;;
-
     esac
 
 done
@@ -89,7 +110,6 @@ exec /usr/bin/apt-get install -y "$@"
 
 EOF
 
-
 chmod 755 \
     /usr/local/bin/nova-pi-store-install
 
@@ -98,7 +118,7 @@ chmod 755 \
 # Remove-Wrapper
 # ============================================================
 
-echo "[4/7] Erstelle Deinstallations-Wrapper..."
+echo "[5/8] Erstelle Deinstallations-Wrapper..."
 
 cat > /usr/local/bin/nova-pi-store-remove <<'EOF'
 #!/bin/sh
@@ -113,12 +133,10 @@ fi
 for package in "$@"; do
 
     case "$package" in
-
         ''|*[!a-zA-Z0-9.+_-]*)
             echo "Ungültiger Paketname: $package"
             exit 1
             ;;
-
     esac
 
 done
@@ -130,7 +148,6 @@ exec /usr/bin/apt-get remove -y "$@"
 
 EOF
 
-
 chmod 755 \
     /usr/local/bin/nova-pi-store-remove
 
@@ -139,7 +156,7 @@ chmod 755 \
 # Update-Wrapper
 # ============================================================
 
-echo "[5/7] Erstelle Update-Wrapper..."
+echo "[6/8] Erstelle Update-Wrapper..."
 
 cat > /usr/local/bin/nova-pi-store-update <<'EOF'
 #!/bin/sh
@@ -154,12 +171,10 @@ fi
 for package in "$@"; do
 
     case "$package" in
-
         ''|*[!a-zA-Z0-9.+_-]*)
             echo "Ungültiger Paketname: $package"
             exit 1
             ;;
-
     esac
 
 done
@@ -171,7 +186,6 @@ exec /usr/bin/apt-get install --only-upgrade -y "$@"
 
 EOF
 
-
 chmod 755 \
     /usr/local/bin/nova-pi-store-update
 
@@ -180,20 +194,19 @@ chmod 755 \
 # Sudo-Berechtigungen
 # ============================================================
 
-echo "[6/7] Konfiguriere Berechtigungen..."
+echo "[7/8] Konfiguriere Berechtigungen..."
 
 cat > /etc/sudoers.d/nova-pi-store <<'EOF'
+
 nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-install *
 nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-remove *
 nova-store ALL=(root) NOPASSWD: /usr/local/bin/nova-pi-store-update *
-EOF
 
+EOF
 
 chmod 440 \
     /etc/sudoers.d/nova-pi-store
 
-
-# Sudo-Konfiguration überprüfen
 
 if command -v visudo >/dev/null 2>&1; then
 
@@ -204,16 +217,18 @@ fi
 
 
 # ============================================================
-# Service starten
+# Services
 # ============================================================
 
-echo "[7/7] Starte Nova Pi Store..."
+echo "[8/8] Starte Nova Pi Store und Agent..."
 
 systemctl daemon-reload
 
 systemctl enable nova-pi-store.service
+systemctl enable nova-pi-store-agent.service
 
 systemctl restart nova-pi-store.service || true
+systemctl restart nova-pi-store-agent.service || true
 
 
 echo
@@ -221,8 +236,18 @@ echo "======================================"
 echo "Nova Pi Store installation complete!"
 echo "======================================"
 echo
+
 echo "Weboberfläche:"
 echo "http://<RASPBERRY-PI-IP>:8080"
+
+echo
+echo "Agent:"
+echo "https://nova-pi-store.onrender.com"
+
+echo
+echo "Der Raspberry Pi verbindet sich jetzt"
+echo "automatisch mit dem Nova Pi Store Server."
+
 echo
 
 exit 0
