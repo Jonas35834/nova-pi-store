@@ -1,844 +1,535 @@
 import os
 import json
 import secrets
-import threading
-import time
+import logging
+from datetime import datetime, timezone
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-import firebase_admin
-from firebase_admin import credentials
-from firebase_admin import auth
 
-from simple_websocket import Server, ConnectionClosed
+# ============================================================
+# CONFIG
+# ============================================================
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP_DIR = os.path.join(BASE_DIR, "app")
+
+PORT = int(os.environ.get("PORT", "10000"))
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+logger = logging.getLogger("nova-pi-store")
 
 
 # ============================================================
 # FLASK
 # ============================================================
 
-app = Flask(__name__)
-
-CORS(
-    app,
-    resources={
-        r"/api/*": {
-            "origins": "*"
-        }
-    }
+app = Flask(
+    __name__,
+    static_folder=APP_DIR,
+    static_url_path=""
 )
 
-
-# ============================================================
-# FIREBASE
-# ============================================================
-
-firebase_file = os.environ.get(
-    "FIREBASE_SERVICE_ACCOUNT_FILE"
-)
-
-if not firebase_file:
-
-    raise RuntimeError(
-        "FIREBASE_SERVICE_ACCOUNT_FILE fehlt."
-    )
-
-
-if not firebase_admin._apps:
-
-    firebase_admin.initialize_app(
-        credentials.Certificate(
-            firebase_file
-        )
-    )
+CORS(app)
 
 
 # ============================================================
-# GERÄTE
+# IN-MEMORY DATA
 # ============================================================
 
-devices = {}
+# Aktuell verbundene Raspberry Pis.
+# Später kann das problemlos durch Firestore ersetzt werden.
+agents = {}
 
-devices_lock = threading.Lock()
-
-
-# ============================================================
-# WEBSOCKET-VERBINDUNGEN
-# ============================================================
-
-connections = {}
-
-connections_lock = threading.Lock()
+# Kleine Aufgabenwarteschlange.
+tasks = {}
 
 
 # ============================================================
-# HILFSFUNKTIONEN
+# HELPERS
 # ============================================================
 
-def now():
-
-    return int(
-        time.time()
-    )
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
 
 
-def get_firebase_user():
-
-    authorization = request.headers.get(
-        "Authorization",
-        ""
-    )
-
-    if not authorization.startswith(
-        "Bearer "
-    ):
-
-        return None
+def generate_id(prefix):
+    return f"{prefix}_{secrets.token_urlsafe(12)}"
 
 
-    token = authorization[
-        7:
-    ].strip()
+def get_json():
+    data = request.get_json(silent=True)
 
+    if not isinstance(data, dict):
+        return {}
 
-    if not token:
-
-        return None
-
-
-    try:
-
-        return auth.verify_id_token(
-            token
-        )
-
-    except Exception:
-
-        return None
-
-
-def require_user():
-
-    user = get_firebase_user()
-
-    if user is None:
-
-        return None, (
-            jsonify({
-                "success": False,
-                "error": "Nicht authentifiziert."
-            }),
-            401
-        )
-
-    return user, None
+    return data
 
 
 # ============================================================
-# STARTSEITE
+# FRONTEND
 # ============================================================
 
-@app.get("/")
+@app.route("/")
 def index():
+    """
+    Liefert die Weboberfläche.
+    """
+
+    index_file = os.path.join(APP_DIR, "index.html")
+
+    if not os.path.exists(index_file):
+        return jsonify({
+            "error": "Frontend nicht gefunden"
+        }), 404
+
+    return send_from_directory(APP_DIR, "index.html")
+
+
+@app.route("/<path:path>")
+def static_files(path):
+    """
+    Liefert CSS, JavaScript, Bilder usw.
+    """
+
+    file_path = os.path.join(APP_DIR, path)
+
+    if os.path.isfile(file_path):
+        return send_from_directory(APP_DIR, path)
 
     return jsonify({
-        "name": "Nova Pi Store API",
-        "version": "1.0.0",
-        "status": "online"
-    })
+        "error": "Datei nicht gefunden"
+    }), 404
 
 
 # ============================================================
 # HEALTH
 # ============================================================
 
-@app.get("/api/health")
+@app.route("/health")
 def health():
+    """
+    Render Health Check.
+    """
 
     return jsonify({
-        "success": True,
+        "status": "ok",
+        "service": "nova-pi-store",
+        "time": now_iso()
+    })
+
+
+# ============================================================
+# API INFO
+# ============================================================
+
+@app.route("/api")
+def api_info():
+
+    return jsonify({
+        "name": "Nova Pi Store API",
+        "version": "1.0.0",
         "status": "online",
-        "time": now()
+        "time": now_iso()
     })
 
 
 # ============================================================
-# ME
+# AGENT REGISTRATION
 # ============================================================
 
-@app.get("/api/me")
-def me():
+@app.route("/api/agent/register", methods=["POST"])
+def register_agent():
 
-    user, error = require_user()
+    data = get_json()
 
-    if error:
+    hostname = str(data.get("hostname", "")).strip()
+    architecture = str(data.get("architecture", "")).strip()
+    os_name = str(data.get("os", "")).strip()
+    version = str(data.get("version", "")).strip()
 
-        return error
+    if not hostname:
+        return jsonify({
+            "success": False,
+            "error": "hostname fehlt"
+        }), 400
 
+    agent_id = data.get("agent_id")
 
-    return jsonify({
-        "success": True,
-        "uid": user["uid"],
-        "email": user.get("email")
-    })
+    if not agent_id:
+        agent_id = generate_id("agent")
 
+    token = secrets.token_urlsafe(32)
 
-# ============================================================
-# GERÄT REGISTRIEREN
-# ============================================================
-
-@app.post("/api/devices/register")
-def register_device():
-
-    user, error = require_user()
-
-    if error:
-
-        return error
-
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-
-    name = data.get(
-        "name",
-        "Raspberry Pi"
-    ).strip()
-
-
-    if not name:
-
-        name = "Raspberry Pi"
-
-
-    device_id = secrets.token_urlsafe(
-        24
-    )
-
-    device_token = secrets.token_urlsafe(
-        48
-    )
-
-
-    device = {
-
-        "id": device_id,
-
-        "uid": user["uid"],
-
-        "name": name,
-
-        "token": device_token,
-
-        "online": False,
-
-        "last_seen": None,
-
-        "system": {},
-
-        "apps": []
-
+    agents[agent_id] = {
+        "agent_id": agent_id,
+        "hostname": hostname,
+        "architecture": architecture,
+        "os": os_name,
+        "version": version,
+        "token": token,
+        "registered_at": now_iso(),
+        "last_seen": now_iso(),
+        "status": "online"
     }
 
-
-    with devices_lock:
-
-        devices[
-            device_id
-        ] = device
-
+    logger.info(
+        "Agent registriert: %s (%s)",
+        agent_id,
+        hostname
+    )
 
     return jsonify({
-
         "success": True,
-
-        "device": {
-
-            "id": device_id,
-
-            "name": name,
-
-            "token": device_token
-
-        }
-
+        "agent_id": agent_id,
+        "token": token,
+        "server_time": now_iso()
     })
 
 
 # ============================================================
-# GERÄTE AUFLISTEN
+# AGENT HEARTBEAT
 # ============================================================
 
-@app.get("/api/devices")
-def list_devices():
+@app.route("/api/agent/heartbeat", methods=["POST"])
+def agent_heartbeat():
 
-    user, error = require_user()
+    data = get_json()
 
-    if error:
+    agent_id = data.get("agent_id")
 
-        return error
+    if not agent_id:
+        return jsonify({
+            "success": False,
+            "error": "agent_id fehlt"
+        }), 400
 
+    agent = agents.get(agent_id)
+
+    if not agent:
+        return jsonify({
+            "success": False,
+            "error": "Agent nicht registriert"
+        }), 404
+
+    agent["last_seen"] = now_iso()
+    agent["status"] = "online"
+
+    if "hostname" in data:
+        agent["hostname"] = data["hostname"]
+
+    if "system" in data:
+        agent["system"] = data["system"]
+
+    if "packages" in data:
+        agent["packages"] = data["packages"]
+
+    return jsonify({
+        "success": True,
+        "server_time": now_iso()
+    })
+
+
+# ============================================================
+# AGENTS
+# ============================================================
+
+@app.route("/api/agents", methods=["GET"])
+def get_agents():
 
     result = []
 
+    for agent in agents.values():
 
-    with devices_lock:
+        public_agent = dict(agent)
 
-        for device in devices.values():
+        # Token niemals an Frontend schicken
+        public_agent.pop("token", None)
 
-            if device["uid"] != user["uid"]:
-
-                continue
-
-
-            result.append({
-
-                "id": device["id"],
-
-                "name": device["name"],
-
-                "online": device["online"],
-
-                "last_seen": device["last_seen"],
-
-                "system": device["system"],
-
-                "apps": device["apps"]
-
-            })
-
+        result.append(public_agent)
 
     return jsonify({
-
         "success": True,
+        "agents": result
+    })
 
-        "devices": result
 
+@app.route("/api/agents/<agent_id>", methods=["GET"])
+def get_agent(agent_id):
+
+    agent = agents.get(agent_id)
+
+    if not agent:
+        return jsonify({
+            "success": False,
+            "error": "Agent nicht gefunden"
+        }), 404
+
+    public_agent = dict(agent)
+    public_agent.pop("token", None)
+
+    return jsonify({
+        "success": True,
+        "agent": public_agent
     })
 
 
 # ============================================================
-# EIN GERÄT
+# TASKS
 # ============================================================
 
-@app.get("/api/devices/<device_id>")
-def get_device(device_id):
+@app.route("/api/tasks", methods=["GET"])
+def get_tasks():
 
-    user, error = require_user()
-
-    if error:
-
-        return error
-
-
-    with devices_lock:
-
-        device = devices.get(
-            device_id
-        )
+    return jsonify({
+        "success": True,
+        "tasks": list(tasks.values())
+    })
 
 
-        if device is None:
+@app.route("/api/tasks", methods=["POST"])
+def create_task():
 
-            return jsonify({
+    data = get_json()
 
-                "success": False,
+    agent_id = data.get("agent_id")
+    action = data.get("action")
 
-                "error": "Gerät nicht gefunden."
+    if not agent_id:
+        return jsonify({
+            "success": False,
+            "error": "agent_id fehlt"
+        }), 400
 
-            }), 404
+    if not action:
+        return jsonify({
+            "success": False,
+            "error": "action fehlt"
+        }), 400
+
+    if agent_id not in agents:
+        return jsonify({
+            "success": False,
+            "error": "Agent nicht gefunden"
+        }), 404
+
+    allowed_actions = [
+        "install",
+        "uninstall",
+        "update",
+        "status",
+        "refresh"
+    ]
+
+    if action not in allowed_actions:
+        return jsonify({
+            "success": False,
+            "error": "Ungültige Aktion"
+        }), 400
+
+    task_id = generate_id("task")
+
+    task = {
+        "task_id": task_id,
+        "agent_id": agent_id,
+        "action": action,
+        "package": data.get("package"),
+        "created_at": now_iso(),
+        "started_at": None,
+        "finished_at": None,
+        "status": "pending",
+        "result": None
+    }
+
+    tasks[task_id] = task
+
+    return jsonify({
+        "success": True,
+        "task": task
+    }), 201
 
 
-        if device["uid"] != user["uid"]:
+# ============================================================
+# AGENT TASK QUEUE
+# ============================================================
 
-            return jsonify({
+@app.route("/api/agent/<agent_id>/tasks", methods=["GET"])
+def agent_tasks(agent_id):
 
-                "success": False,
+    if agent_id not in agents:
+        return jsonify({
+            "success": False,
+            "error": "Agent nicht gefunden"
+        }), 404
 
-                "error": "Kein Zugriff."
+    pending = []
 
-            }), 403
+    for task in tasks.values():
 
+        if (
+            task["agent_id"] == agent_id
+            and task["status"] == "pending"
+        ):
+            pending.append(task)
+
+    return jsonify({
+        "success": True,
+        "tasks": pending
+    })
+
+
+# ============================================================
+# TASK RESULT
+# ============================================================
+
+@app.route("/api/tasks/<task_id>/result", methods=["POST"])
+def task_result(task_id):
+
+    task = tasks.get(task_id)
+
+    if not task:
+        return jsonify({
+            "success": False,
+            "error": "Task nicht gefunden"
+        }), 404
+
+    data = get_json()
+
+    status = data.get("status")
+
+    if status not in [
+        "running",
+        "success",
+        "failed"
+    ]:
+        return jsonify({
+            "success": False,
+            "error": "Ungültiger Status"
+        }), 400
+
+    task["status"] = status
+
+    if status == "running":
+        task["started_at"] = now_iso()
+
+    if status in ["success", "failed"]:
+        task["finished_at"] = now_iso()
+
+    task["result"] = data.get("result")
+
+    return jsonify({
+        "success": True
+    })
+
+
+# ============================================================
+# STORE
+# ============================================================
+
+@app.route("/api/store", methods=["GET"])
+def store():
+
+    apps_file = os.path.join(BASE_DIR, "apps.json")
+
+    if not os.path.exists(apps_file):
 
         return jsonify({
-
             "success": True,
-
-            "device": {
-
-                "id": device["id"],
-
-                "name": device["name"],
-
-                "online": device["online"],
-
-                "last_seen": device["last_seen"],
-
-                "system": device["system"],
-
-                "apps": device["apps"]
-
-            }
-
+            "apps": []
         })
-
-
-# ============================================================
-# PI WEBSOCKET
-# ============================================================
-
-@app.route(
-    "/ws/device",
-    websocket=True
-)
-def device_websocket():
-
-    ws = Server.accept(
-        request.environ
-    )
-
-
-    device_id = None
-
 
     try:
 
-        # ----------------------------------------------------
-        # Erste Nachricht
-        # ----------------------------------------------------
+        with open(
+            apps_file,
+            "r",
+            encoding="utf-8"
+        ) as file:
 
-        raw = ws.receive()
+            data = json.load(file)
 
+        if isinstance(data, list):
 
-        if not raw:
-
-            ws.close()
-
-            return ""
-
-
-        data = json.loads(
-            raw
-        )
-
-
-        if data.get("type") != "authenticate":
-
-            ws.send(
-                json.dumps({
-                    "type": "error",
-                    "error": "Authentifizierung erforderlich."
-                })
-            )
-
-            ws.close()
-
-            return ""
-
-
-        device_id = data.get(
-            "device_id"
-        )
-
-        token = data.get(
-            "token"
-        )
-
-
-        if not device_id or not token:
-
-            ws.send(
-                json.dumps({
-                    "type": "error",
-                    "error": "Gerätedaten fehlen."
-                })
-            )
-
-            ws.close()
-
-            return ""
-
-
-        # ----------------------------------------------------
-        # Gerät prüfen
-        # ----------------------------------------------------
-
-        with devices_lock:
-
-            device = devices.get(
-                device_id
-            )
-
-
-            if device is None:
-
-                ws.send(
-                    json.dumps({
-                        "type": "error",
-                        "error": "Gerät nicht gefunden."
-                    })
-                )
-
-                ws.close()
-
-                return ""
-
-
-            if not secrets.compare_digest(
-                device["token"],
-                token
-            ):
-
-                ws.send(
-                    json.dumps({
-                        "type": "error",
-                        "error": "Ungültiger Token."
-                    })
-                )
-
-                ws.close()
-
-                return ""
-
-
-            device["online"] = True
-
-            device["last_seen"] = now()
-
-
-        # ----------------------------------------------------
-        # Verbindung speichern
-        # ----------------------------------------------------
-
-        with connections_lock:
-
-            connections[
-                device_id
-            ] = ws
-
-
-        ws.send(
-            json.dumps({
-                "type": "authenticated"
+            return jsonify({
+                "success": True,
+                "apps": data
             })
-        )
 
+        if isinstance(data, dict):
 
-        # ----------------------------------------------------
-        # Nachrichten vom Pi
-        # ----------------------------------------------------
-
-        while True:
-
-            raw = ws.receive()
-
-
-            if raw is None:
-
-                break
-
-
-            try:
-
-                message = json.loads(
-                    raw
-                )
-
-            except Exception:
-
-                continue
-
-
-            message_type = message.get(
-                "type"
-            )
-
-
-            # ------------------------------------------------
-            # Heartbeat
-            # ------------------------------------------------
-
-            if message_type == "heartbeat":
-
-                with devices_lock:
-
-                    if device_id in devices:
-
-                        devices[
-                            device_id
-                        ]["online"] = True
-
-                        devices[
-                            device_id
-                        ]["last_seen"] = now()
-
-
-                ws.send(
-                    json.dumps({
-                        "type": "heartbeat_ack"
-                    })
-                )
-
-
-            # ------------------------------------------------
-            # Systeminformationen
-            # ------------------------------------------------
-
-            elif message_type == "system":
-
-                with devices_lock:
-
-                    if device_id in devices:
-
-                        devices[
-                            device_id
-                        ]["system"] = message.get(
-                            "system",
-                            {}
-                        )
-
-
-            # ------------------------------------------------
-            # Apps
-            # ------------------------------------------------
-
-            elif message_type == "apps":
-
-                with devices_lock:
-
-                    if device_id in devices:
-
-                        devices[
-                            device_id
-                        ]["apps"] = message.get(
-                            "apps",
-                            []
-                        )
-
-
-            # ------------------------------------------------
-            # Command Result
-            # ------------------------------------------------
-
-            elif message_type == "command_result":
-
-                # Die Website bekommt das Ergebnis
-                # über die REST-Abfrage bzw. zukünftige
-                # Erweiterung.
-
-                pass
-
-
-    except ConnectionClosed:
-
-        pass
+            return jsonify({
+                "success": True,
+                "apps": data.get("apps", [])
+            })
 
     except Exception as error:
 
-        print(
-            "WebSocket error:",
-            error
-        )
-
-    finally:
-
-        if device_id:
-
-            with connections_lock:
-
-                if connections.get(
-                    device_id
-                ) is ws:
-
-                    del connections[
-                        device_id
-                    ]
-
-
-            with devices_lock:
-
-                if device_id in devices:
-
-                    devices[
-                        device_id
-                    ]["online"] = False
-
-
-    return ""
-
-
-# ============================================================
-# BEFEHL AN PI
-# ============================================================
-
-@app.post(
-    "/api/devices/<device_id>/command"
-)
-def send_command(device_id):
-
-    user, error = require_user()
-
-    if error:
-
-        return error
-
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-
-    command = data.get(
-        "command"
-    )
-
-
-    allowed_commands = {
-
-        "install",
-
-        "remove",
-
-        "update",
-
-        "system",
-
-        "apps",
-
-        "reboot",
-
-        "shutdown"
-
-    }
-
-
-    if command not in allowed_commands:
+        logger.exception("Fehler beim Laden von apps.json")
 
         return jsonify({
-
             "success": False,
-
-            "error": "Unbekannter Befehl."
-
-        }), 400
-
-
-    with devices_lock:
-
-        device = devices.get(
-            device_id
-        )
-
-
-        if device is None:
-
-            return jsonify({
-
-                "success": False,
-
-                "error": "Gerät nicht gefunden."
-
-            }), 404
-
-
-        if device["uid"] != user["uid"]:
-
-            return jsonify({
-
-                "success": False,
-
-                "error": "Kein Zugriff."
-
-            }), 403
-
-
-    with connections_lock:
-
-        ws = connections.get(
-            device_id
-        )
-
-
-    if ws is None:
-
-        return jsonify({
-
-            "success": False,
-
-            "error": "Raspberry Pi ist offline."
-
-        }), 409
-
-
-    message = {
-
-        "type": "command",
-
-        "id": secrets.token_urlsafe(
-            16
-        ),
-
-        "command": command,
-
-        "packages": data.get(
-            "packages",
-            []
-        )
-
-    }
-
-
-    try:
-
-        ws.send(
-            json.dumps(
-                message
-            )
-        )
-
-    except Exception:
-
-        return jsonify({
-
-            "success": False,
-
-            "error": "Befehl konnte nicht gesendet werden."
-
+            "error": str(error)
         }), 500
 
-
     return jsonify({
-
         "success": True,
-
-        "command_id": message["id"]
-
+        "apps": []
     })
 
 
 # ============================================================
-# START
+# SYSTEM
+# ============================================================
+
+@app.route("/api/system")
+def system():
+
+    return jsonify({
+        "service": "Nova Pi Store",
+        "server": "Render",
+        "time": now_iso(),
+        "agents": len(agents),
+        "tasks": len(tasks)
+    })
+
+
+# ============================================================
+# ERROR HANDLERS
+# ============================================================
+
+@app.errorhandler(404)
+def not_found(error):
+
+    return jsonify({
+        "success": False,
+        "error": "Route nicht gefunden"
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+
+    logger.exception("Interner Serverfehler")
+
+    return jsonify({
+        "success": False,
+        "error": "Interner Serverfehler"
+    }), 500
+
+
+# ============================================================
+# LOCAL DEVELOPMENT
 # ============================================================
 
 if __name__ == "__main__":
 
-    port = int(
-        os.environ.get(
-            "PORT",
-            "10000"
-        )
-    )
-
-
     app.run(
-
         host="0.0.0.0",
-
-        port=port,
-
-        debug=False
-
+        port=PORT,
+        debug=True
     )
