@@ -1,73 +1,180 @@
+import copy
 import json
 import os
 import re
 import subprocess
 import threading
+import time
+import urllib.request
+import urllib.error
 
 from flask import Flask, jsonify, render_template
 
 
+# ============================================================
+# Konfiguration
+# ============================================================
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-APPS_FILE = os.path.join(
-    BASE_DIR,
-    "apps.json"
+# GitHub-Pages-Version von apps.json
+APPS_URL = (
+    "https://jonas35834.github.io/"
+    "nova-pi-store/apps.json"
 )
 
+# Wie lange die App-Liste lokal zwischengespeichert wird
+APPS_CACHE_SECONDS = 60
+
+
+# ============================================================
+# Flask
+# ============================================================
 
 app = Flask(__name__)
 
 
+# ============================================================
+# App-Cache
+# ============================================================
+
+apps_cache = {
+    "apps": None,
+    "timestamp": 0,
+    "error": None
+}
+
+apps_cache_lock = threading.Lock()
+
+
+# ============================================================
+# Installationsstatus
+# ============================================================
+
 state = {
     "running": False,
     "app": None,
-    "action": None,
     "output": "",
     "success": None
 }
-
 
 state_lock = threading.Lock()
 
 
 # ============================================================
-# APP-DATEN
+# Apps von GitHub laden
+# ============================================================
+
+def load_apps_from_github():
+
+    request = urllib.request.Request(
+        APPS_URL,
+        headers={
+            "User-Agent": "Nova-Pi-Store"
+        }
+    )
+
+    with urllib.request.urlopen(
+        request,
+        timeout=10
+    ) as response:
+
+        data = response.read().decode("utf-8")
+
+    parsed = json.loads(data)
+
+    if not isinstance(parsed, dict):
+        raise Exception(
+            "Ungültiges apps.json Format."
+        )
+
+    apps = parsed.get("apps")
+
+    if not isinstance(apps, list):
+        raise Exception(
+            "apps.json enthält keine gültige 'apps'-Liste."
+        )
+
+    return apps
+
+
+# ============================================================
+# Apps laden
 # ============================================================
 
 def load_apps():
 
-    with open(
-        APPS_FILE,
-        "r",
-        encoding="utf-8"
-    ) as file:
+    now = time.time()
 
-        return json.load(file)["apps"]
+    with apps_cache_lock:
 
+        cached_apps = apps_cache["apps"]
+        cached_time = apps_cache["timestamp"]
+
+        # Cache noch gültig
+        if (
+            cached_apps is not None
+            and now - cached_time < APPS_CACHE_SECONDS
+        ):
+
+            return copy.deepcopy(cached_apps)
+
+
+    # GitHub aktualisieren
+    try:
+
+        apps = load_apps_from_github()
+
+        with apps_cache_lock:
+
+            apps_cache["apps"] = apps
+            apps_cache["timestamp"] = time.time()
+            apps_cache["error"] = None
+
+        return copy.deepcopy(apps)
+
+
+    except Exception as error:
+
+        print(
+            "Fehler beim Laden von apps.json:",
+            error
+        )
+
+        # Wenn bereits ein alter Cache existiert,
+        # diesen weiterverwenden
+        with apps_cache_lock:
+
+            if apps_cache["apps"] is not None:
+
+                apps_cache["error"] = str(error)
+
+                return copy.deepcopy(
+                    apps_cache["apps"]
+                )
+
+        # Noch kein Cache vorhanden
+        raise
+
+
+# ============================================================
+# App suchen
+# ============================================================
 
 def find_app(app_id):
 
     for item in load_apps():
 
-        if item["id"] == app_id:
+        if item.get("id") == app_id:
+
             return item
 
     return None
 
 
 # ============================================================
-# APT / DPKG
+# Paket installiert?
 # ============================================================
-
-def valid_package_name(package):
-
-    return bool(
-        re.fullmatch(
-            r"[a-zA-Z0-9.+_-]+",
-            package
-        )
-    )
-
 
 def is_installed(package):
 
@@ -89,85 +196,9 @@ def is_installed(package):
     )
 
 
-def get_installed_version(package):
-
-    result = subprocess.run(
-        [
-            "dpkg-query",
-            "-W",
-            "-f=${Version}",
-            package
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True
-    )
-
-    version = result.stdout.strip()
-
-    if not version:
-        return None
-
-    return version
-
-
-def get_candidate_version(package):
-
-    result = subprocess.run(
-        [
-            "apt-cache",
-            "policy",
-            package
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True
-    )
-
-    for line in result.stdout.splitlines():
-
-        line = line.strip()
-
-        if line.startswith("Candidate:"):
-
-            version = line.split(
-                ":",
-                1
-            )[1].strip()
-
-            if version and version != "(none)":
-                return version
-
-    return None
-
-
-def has_update(package):
-
-    installed = get_installed_version(
-        package
-    )
-
-    candidate = get_candidate_version(
-        package
-    )
-
-    if not installed or not candidate:
-        return False
-
-    result = subprocess.run(
-        [
-            "dpkg",
-            "--compare-versions",
-            candidate,
-            "gt",
-            installed
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-
-    return result.returncode == 0
-
+# ============================================================
+# App installiert?
+# ============================================================
 
 def app_is_installed(item):
 
@@ -177,6 +208,7 @@ def app_is_installed(item):
     )
 
     if not packages:
+
         return False
 
     return all(
@@ -185,83 +217,25 @@ def app_is_installed(item):
     )
 
 
-def app_has_update(item):
+# ============================================================
+# Paketname prüfen
+# ============================================================
 
-    if not app_is_installed(item):
-        return False
+def valid_package_name(package):
 
-    packages = item.get(
-        "packages",
-        []
-    )
-
-    return any(
-        has_update(package)
-        for package in packages
-    )
-
-
-def get_app_versions(item):
-
-    packages = item.get(
-        "packages",
-        []
-    )
-
-    versions = []
-
-    for package in packages:
-
-        installed = get_installed_version(
+    return bool(
+        re.fullmatch(
+            r"[a-zA-Z0-9.+_-]+",
             package
         )
-
-        candidate = get_candidate_version(
-            package
-        )
-
-        versions.append({
-            "package": package,
-            "installed": installed,
-            "candidate": candidate
-        })
-
-    return versions
-
-
-# ============================================================
-# APP STATUS
-# ============================================================
-
-def prepare_app(item):
-
-    result = dict(item)
-
-    result["installed"] = app_is_installed(
-        item
     )
 
-    result["update_available"] = (
-        app_has_update(item)
-        if result["installed"]
-        else False
-    )
-
-    result["versions"] = get_app_versions(
-        item
-    )
-
-    return result
-
 
 # ============================================================
-# INSTALL / REMOVE / UPDATE
+# Installations-Worker
 # ============================================================
 
-def run_worker(
-    app_id,
-    action
-):
+def install_worker(app_id):
 
     global state
 
@@ -272,7 +246,7 @@ def run_worker(
         if item is None:
 
             state["output"] = (
-                "App nicht gefunden."
+                "App nicht gefunden.\n"
             )
 
             state["success"] = False
@@ -282,25 +256,32 @@ def run_worker(
 
         state["running"] = True
         state["app"] = app_id
-        state["action"] = action
         state["output"] = ""
         state["success"] = None
 
 
     try:
 
+        # ------------------------------------------------------
+        # Nur APT-Apps erlauben
+        # ------------------------------------------------------
+
         if item.get("type") != "apt":
 
             raise Exception(
-                "Dieser App-Typ wird noch nicht unterstützt."
+                "Dieser App-Typ wird noch "
+                "nicht unterstützt."
             )
 
+
+        # ------------------------------------------------------
+        # Pakete
+        # ------------------------------------------------------
 
         packages = item.get(
             "packages",
             []
         )
-
 
         if not packages:
 
@@ -309,6 +290,10 @@ def run_worker(
             )
 
 
+        # ------------------------------------------------------
+        # Paketnamen prüfen
+        # ------------------------------------------------------
+
         for package in packages:
 
             if not valid_package_name(
@@ -316,60 +301,22 @@ def run_worker(
             ):
 
                 raise Exception(
-                    f"Ungültiger Paketname: {package}"
+                    "Ungültiger Paketname: "
+                    + str(package)
                 )
 
 
-        # ----------------------------------------------------
-        # INSTALL
-        # ----------------------------------------------------
+        # ------------------------------------------------------
+        # Installation
+        # ------------------------------------------------------
 
-        if action == "install":
+        command = [
+            "sudo",
+            "/usr/local/bin/"
+            "nova-pi-store-install"
+        ]
 
-            command = [
-                "sudo",
-                "/usr/local/bin/"
-                "nova-pi-store-install"
-            ]
-
-            command.extend(packages)
-
-
-        # ----------------------------------------------------
-        # REMOVE
-        # ----------------------------------------------------
-
-        elif action == "remove":
-
-            command = [
-                "sudo",
-                "/usr/local/bin/"
-                "nova-pi-store-remove"
-            ]
-
-            command.extend(packages)
-
-
-        # ----------------------------------------------------
-        # UPDATE
-        # ----------------------------------------------------
-
-        elif action == "update":
-
-            command = [
-                "sudo",
-                "/usr/local/bin/"
-                "nova-pi-store-update"
-            ]
-
-            command.extend(packages)
-
-
-        else:
-
-            raise Exception(
-                "Unbekannte Aktion."
-            )
+        command.extend(packages)
 
 
         process = subprocess.Popen(
@@ -380,6 +327,10 @@ def run_worker(
             bufsize=1
         )
 
+
+        # ------------------------------------------------------
+        # Ausgabe lesen
+        # ------------------------------------------------------
 
         if process.stdout:
 
@@ -392,6 +343,10 @@ def run_worker(
 
         process.wait()
 
+
+        # ------------------------------------------------------
+        # Ergebnis
+        # ------------------------------------------------------
 
         with state_lock:
 
@@ -421,16 +376,32 @@ def run_worker(
 
 
 # ============================================================
-# WEBSEITE
+# Startseite
 # ============================================================
 
 @app.route("/")
 def index():
 
-    apps = [
-        prepare_app(item)
-        for item in load_apps()
-    ]
+    try:
+
+        apps = load_apps()
+
+    except Exception as error:
+
+        return (
+            "Nova Pi Store konnte die App-Liste "
+            "nicht laden: "
+            + str(error),
+            503
+        )
+
+
+    for item in apps:
+
+        item["installed"] = (
+            app_is_installed(item)
+        )
+
 
     return render_template(
         "index.html",
@@ -439,44 +410,111 @@ def index():
 
 
 # ============================================================
-# API: APPS
+# API: Apps
 # ============================================================
 
 @app.route("/api/apps")
 def api_apps():
 
-    apps = [
-        prepare_app(item)
-        for item in load_apps()
-    ]
+    try:
 
-    return jsonify(apps)
+        apps = load_apps()
 
-
-# ============================================================
-# API: ACTION
-# ============================================================
-
-@app.route(
-    "/api/<action>/<app_id>",
-    methods=["POST"]
-)
-def action(
-    action,
-    app_id
-):
-
-    if action not in (
-        "install",
-        "remove",
-        "update"
-    ):
+    except Exception as error:
 
         return jsonify({
             "success": False,
-            "error": "Ungültige Aktion."
-        }), 400
+            "error": str(error)
+        }), 503
 
+
+    for item in apps:
+
+        item["installed"] = (
+            app_is_installed(item)
+        )
+
+
+    return jsonify({
+        "success": True,
+        "apps": apps
+    })
+
+
+# ============================================================
+# API: Apps aktualisieren
+# ============================================================
+
+@app.route("/api/apps/refresh", methods=["POST"])
+def refresh_apps():
+
+    try:
+
+        apps = load_apps_from_github()
+
+        with apps_cache_lock:
+
+            apps_cache["apps"] = apps
+            apps_cache["timestamp"] = time.time()
+            apps_cache["error"] = None
+
+        return jsonify({
+            "success": True,
+            "count": len(apps)
+        })
+
+
+    except Exception as error:
+
+        return jsonify({
+            "success": False,
+            "error": str(error)
+        }), 503
+
+
+# ============================================================
+# API: Repository-Status
+# ============================================================
+
+@app.route("/api/repository")
+def repository_status():
+
+    with apps_cache_lock:
+
+        timestamp = apps_cache["timestamp"]
+        error = apps_cache["error"]
+        cached = apps_cache["apps"] is not None
+
+
+    if timestamp:
+
+        age = int(
+            time.time() - timestamp
+        )
+
+    else:
+
+        age = None
+
+
+    return jsonify({
+        "url": APPS_URL,
+        "cached": cached,
+        "cache_age_seconds": age,
+        "cache_seconds": APPS_CACHE_SECONDS,
+        "error": error
+    })
+
+
+# ============================================================
+# API: Installation
+# ============================================================
+
+@app.route(
+    "/api/install/<app_id>",
+    methods=["POST"]
+)
+def install(app_id):
 
     with state_lock:
 
@@ -486,7 +524,7 @@ def action(
                 "success": False,
                 "error": (
                     "Es läuft bereits "
-                    "eine Aktion."
+                    "eine Installation."
                 )
             }), 409
 
@@ -503,11 +541,8 @@ def action(
 
 
     thread = threading.Thread(
-        target=run_worker,
-        args=(
-            app_id,
-            action
-        ),
+        target=install_worker,
+        args=(app_id,),
         daemon=True
     )
 
@@ -520,7 +555,7 @@ def action(
 
 
 # ============================================================
-# API: STATUS
+# API: Status
 # ============================================================
 
 @app.route("/api/status")
@@ -531,14 +566,13 @@ def status():
         return jsonify({
             "running": state["running"],
             "app": state["app"],
-            "action": state["action"],
             "output": state["output"],
             "success": state["success"]
         })
 
 
 # ============================================================
-# API: SYSTEM
+# API: System
 # ============================================================
 
 @app.route("/api/system")
@@ -572,7 +606,7 @@ def system():
 
 
 # ============================================================
-# START
+# Start
 # ============================================================
 
 if __name__ == "__main__":
