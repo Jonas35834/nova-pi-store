@@ -1,19 +1,23 @@
 [Unit]
-Description=Nova Pi Store Web Application
-After=network.target
+Description=Nova Pi Store Agent
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 
-User=nova-store
-Group=nova-store
+User=root
+Group=root
 
 WorkingDirectory=/opt/nova-pi-store
 
-ExecStart=/usr/bin/python3 /opt/nova-pi-store/app/app.py
+ExecStart=/usr/bin/python3 /opt/nova-pi-store/agent/agent.py
 
 Restart=always
-RestartSec=3
+RestartSec=5
+
+Environment=NOVA_PI_STORE_SERVER=https://nova-pi-store.onrender.com
+Environment=NOVA_PI_STORE_POLL_INTERVAL=10
 
 PrivateTmp=true
 
