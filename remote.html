@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+
+<html lang="de">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Nova Pi Store Remote</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+
+            margin: 0;
+
+            min-height: 100vh;
+
+            background:
+                radial-gradient(
+                    circle at top,
+                    #1e293b,
+                    #080b10 60%
+                );
+
+            color: white;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
+        }
+
+
+        .container {
+
+            max-width: 1000px;
+
+            margin: auto;
+
+            padding: 30px 20px;
+
+        }
+
+
+        .card {
+
+            background:
+                rgba(
+                    17,
+                    24,
+                    39,
+                    0.9
+                );
+
+            border:
+                1px solid #334155;
+
+            border-radius: 18px;
+
+            padding: 25px;
+
+            margin-bottom: 20px;
+
+        }
+
+
+        input {
+
+            width: 100%;
+
+            padding: 13px;
+
+            margin-bottom: 10px;
+
+            border-radius: 10px;
+
+            border:
+                1px solid #334155;
+
+            background: #020617;
+
+            color: white;
+
+        }
+
+
+        button {
+
+            padding: 11px 16px;
+
+            border: 0;
+
+            border-radius: 10px;
+
+            cursor: pointer;
+
+            font-weight: bold;
+
+            margin: 4px;
+
+        }
+
+
+        .primary {
+
+            background: white;
+
+            color: #0f172a;
+
+        }
+
+
+        .danger {
+
+            background: #7f1d1d;
+
+            color: white;
+
+        }
+
+
+        .device {
+
+            border:
+                1px solid #334155;
+
+            border-radius: 14px;
+
+            padding: 18px;
+
+            margin-top: 15px;
+
+        }
+
+
+        .online {
+
+            color: #4ade80;
+
+        }
+
+
+        .offline {
+
+            color: #f87171;
+
+        }
+
+
+        pre {
+
+            background: #020617;
+
+            padding: 15px;
+
+            border-radius: 10px;
+
+            overflow: auto;
+
+        }
+
+
+        #dashboard {
+
+            display: none;
+
+        }
+
+
+        #login {
+
+            max-width: 500px;
+
+            margin: 80px auto;
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+    <!-- ================================================= -->
+    <!-- LOGIN -->
+    <!-- ================================================= -->
+
+    <section
+        id="login"
+        class="card"
+    >
+
+        <h1>🍓 Nova Pi Store</h1>
+
+        <h2>Anmelden</h2>
+
+        <input
+            id="email"
+            type="email"
+            placeholder="E-Mail"
+        >
+
+        <input
+            id="password"
+            type="password"
+            placeholder="Passwort"
+        >
+
+        <button
+            class="primary"
+            onclick="login()"
+        >
+            Anmelden
+        </button>
+
+        <button
+            onclick="register()"
+        >
+            Registrieren
+        </button>
+
+        <p id="loginStatus"></p>
+
+    </section>
+
+
+    <!-- ================================================= -->
+    <!-- DASHBOARD -->
+    <!-- ================================================= -->
+
+    <section id="dashboard">
+
+        <div class="card">
+
+            <h1>🍓 Nova Pi Store</h1>
+
+            <p id="userInfo"></p>
+
+            <button
+                onclick="logout()"
+            >
+                Abmelden
+            </button>
+
+        </div>
+
+
+        <div class="card">
+
+            <h2>Raspberry Pis</h2>
+
+            <button
+                class="primary"
+                onclick="registerPi()"
+            >
+                + Raspberry Pi verbinden
+            </button>
+
+            <div id="devices"></div>
+
+        </div>
+
+
+        <div
+            id="devicePanel"
+            class="card"
+            style="display:none"
+        >
+
+            <h2 id="deviceTitle"></h2>
+
+            <p id="deviceStatus"></p>
+
+            <h3>System</h3>
+
+            <pre id="system"></pre>
+
+
+            <h3>Apps</h3>
+
+            <pre id="apps"></pre>
+
+
+            <h3>Pakete</h3>
+
+            <input
+                id="packageName"
+                placeholder="z.B. htop"
+            >
+
+
+            <button
+                class="primary"
+                onclick="installPackage()"
+            >
+                Installieren
+            </button>
+
+
+            <button
+                onclick="removePackage()"
+            >
+                Deinstallieren
+            </button>
+
+
+            <button
+                onclick="updatePackage()"
+            >
+                Aktualisieren
+            </button>
+
+
+            <h3>System</h3>
+
+            <button
+                onclick="systemCommand()"
+            >
+                System aktualisieren
+            </button>
+
+
+            <button
+                onclick="rebootPi()"
+            >
+                Raspberry Pi neu starten
+            </button>
+
+
+            <button
+                class="danger"
+                onclick="shutdownPi()"
+            >
+                Raspberry Pi ausschalten
+            </button>
+
+
+            <pre id="result"></pre>
+
+        </div>
+
+    </section>
+
+</div>
+
+
+<script type="module">
+
+    import {
+        initializeApp
+    }
+    from
+        "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+
+    import {
+        getAuth,
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        signOut,
+        onAuthStateChanged,
+        getIdToken
+    }
+    from
+        "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+
+
+    // ========================================================
+    // FIREBASE CONFIG
+    // ========================================================
+
+    const firebaseConfig = {
+
+        apiKey:
+            "DEINE_API_KEY",
+
+        authDomain:
+            "DEIN-PROJEKT.firebaseapp.com",
+
+        projectId:
+            "DEIN-PROJEKT",
+
+        storageBucket:
+            "DEIN-PROJEKT.firebasestorage.app",
+
+        messagingSenderId:
+            "DEINE_SENDER_ID",
+
+        appId:
+            "DEINE_APP_ID"
+
+    };
+
+
+    const firebaseApp =
+        initializeApp(
+            firebaseConfig
+        );
+
+
+    const auth =
+        getAuth(
+            firebaseApp
+        );
+
+
+    // ========================================================
+    // BACKEND
+    // ========================================================
+
+    const API =
+        "https://DEIN-RENDER-SERVICE.onrender.com";
+
+
+    let selectedDevice = null;
+
+
+    // ========================================================
+    // API
+    // ========================================================
+
+    async function api(
+        path,
+        options = {}
+    ) {
+
+        const user =
+            auth.currentUser;
+
+
+        if (!user) {
+
+            throw new Error(
+                "Nicht angemeldet."
+            );
+
+        }
+
+
+        const token =
+            await getIdToken(
+                user,
+                true
+            );
+
+
+        options.headers = {
+
+            ...(options.headers || {}),
+
+            "Authorization":
+                `Bearer ${token}`,
+
+            "Content-Type":
+                "application/json"
+
+        };
+
+
+        const response =
+            await fetch(
+                API + path,
+                options
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                "API-Fehler"
+            );
+
+        }
+
+
+        return data;
+
+    }
+
+
+    // ========================================================
+    // LOGIN
+    // ========================================================
+
+    window.login =
+        async function() {
+
+            const email =
+                document
+                    .getElementById(
+                        "email"
+                    )
+                    .value;
+
+
+            const password =
+                document
+                    .getElementById(
+                        "password"
+                    )
+                    .value;
+
+
+            try {
+
+                await signInWithEmailAndPassword(
+                    auth,
+                    email,
+                    password
+                );
+
+
+            } catch (error) {
+
+                document
+                    .getElementById(
+                        "loginStatus"
+                    )
+                    .textContent =
+                    error.message;
+
+            }
+
+        };
+
+
+    // ========================================================
+    // REGISTER
+    // ========================================================
+
+    window.register =
+        async function() {
+
+            const email =
+                document
+                    .getElementById(
+                        "email"
+                    )
+                    .value;
+
+
+            const password =
+                document
+                    .getElementById(
+                        "password"
+                    )
+                    .value;
+
+
+            try {
+
+                await createUserWithEmailAndPassword(
+                    auth,
+                    email,
+                    password
+                );
+
+
+            } catch (error) {
+
+                document
+                    .getElementById(
+                        "loginStatus"
+                    )
+                    .textContent =
+                    error.message;
+
+            }
+
+        };
+
+
+    // ========================================================
+    // LOGOUT
+    // ========================================================
+
+    window.logout =
+        async function() {
+
+            await signOut(
+                auth
+            );
+
+        };
+
+
+    // ========================================================
+    // AUTH STATE
+    // ========================================================
+
+    onAuthStateChanged(
+        auth,
+        async user => {
+
+            const login =
+                document
+                    .getElementById(
+                        "login"
+                    );
+
+
+            const dashboard =
+                document
+                    .getElementById(
+                        "dashboard"
+                    );
+
+
+            if (user) {
+
+                login.style.display =
+                    "none";
+
+
+                dashboard.style.display =
+                    "block";
+
+
+                document
+                    .getElementById(
+                        "userInfo"
+                    )
+                    .textContent =
+                    user.email;
+
+
+                await loadDevices();
+
+
+            } else {
+
+                login.style.display =
+                    "block";
+
+
+                dashboard.style.display =
+                    "none";
+
+            }
+
+        }
+    );
+
+
+    // ========================================================
+    // GERÄTE
+    // ========================================================
+
+    async function loadDevices() {
+
+        try {
+
+            const data =
+                await api(
+                    "/api/devices"
+                );
+
+
+            const container =
+                document
+                    .getElementById(
+                        "devices"
+                    );
+
+
+            container.innerHTML =
+                "";
+
+
+            for (
+                const device
+                of data.devices
+            ) {
+
+                const div =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                div.className =
+                    "device";
+
+
+                div.innerHTML = `
+
+                    <h3>
+                        ${escapeHtml(device.name)}
+                    </h3>
+
+                    <p class="${
+                        device.online
+                            ? "online"
+                            : "offline"
+                    }">
+
+                        ${
+                            device.online
+                                ? "🟢 Online"
+                                : "🔴 Offline"
+                        }
+
+                    </p>
+
+                    <button
+                        class="primary"
+                        onclick="selectDevice('${device.id}')"
+                    >
+                        Öffnen
+                    </button>
+
+                `;
+
+
+                container.appendChild(
+                    div
+                );
+
+            }
+
+
+        } catch (error) {
+
+            console.error(
+                error
+            );
+
+        }
+
+    }
+
+
+    // ========================================================
+    // PI REGISTRIEREN
+    // ========================================================
+
+    window.registerPi =
+        async function() {
+
+            const name =
+                prompt(
+                    "Name des Raspberry Pis:",
+                    "Raspberry Pi"
+                );
+
+
+            if (!name) {
+
+                return;
+
+            }
+
+
+            try {
+
+                const data =
+                    await api(
+                        "/api/devices/register",
+                        {
+
+                            method:
+                                "POST",
+
+                            body:
+                                JSON.stringify({
+                                    name
+                                })
+
+                        }
+                    );
+
+
+                const device =
+                    data.device;
+
+
+                alert(
+                    "Pi registriert!\n\n"
+                    +
+                    "DEVICE_ID:\n"
+                    +
+                    device.id
+                    +
+                    "\n\n"
+                    +
+                    "TOKEN:\n"
+                    +
+                    device.token
+                    +
+                    "\n\n"
+                    +
+                    "Diese Daten werden nur jetzt angezeigt."
+                );
+
+
+                await loadDevices();
+
+
+            } catch (error) {
+
+                alert(
+                    error.message
+                );
+
+            }
+
+        };
+
+
+    // ========================================================
+    // DEVICE AUSWÄHLEN
+    // ========================================================
+
+    window.selectDevice =
+        async function(
+            deviceId
+        ) {
+
+            try {
+
+                const data =
+                    await api(
+                        "/api/devices/"
+                        + deviceId
+                    );
+
+
+                selectedDevice =
+                    data.device;
+
+
+                document
+                    .getElementById(
+                        "devicePanel"
+                    )
+                    .style.display =
+                    "block";
+
+
+                document
+                    .getElementById(
+                        "deviceTitle"
+                    )
+                    .textContent =
+                    selectedDevice.name;
+
+
+                updateDevicePanel();
+
+
+            } catch (error) {
+
+                alert(
+                    error.message
+                );
+
+            }
+
+        };
+
+
+    // ========================================================
+    // PANEL
+    // ========================================================
+
+    function updateDevicePanel() {
+
+        if (!selectedDevice) {
+
+            return;
+
+        }
+
+
+        document
+            .getElementById(
+                "deviceStatus"
+            )
+            .textContent =
+            selectedDevice.online
+                ? "🟢 Online"
+                : "🔴 Offline";
+
+
+        document
+            .getElementById(
+                "system"
+            )
+            .textContent =
+            JSON.stringify(
+                selectedDevice.system,
+                null,
+                2
+            );
+
+
+        document
+            .getElementById(
+                "apps"
+            )
+            .textContent =
+            JSON.stringify(
+                selectedDevice.apps,
+                null,
+                2
+            );
+
+    }
+
+
+    // ========================================================
+    // COMMAND
+    // ========================================================
+
+    async function sendCommand(
+        command,
+        packages = []
+    ) {
+
+        if (!selectedDevice) {
+
+            alert(
+                "Kein Raspberry Pi ausgewählt."
+            );
+
+            return;
+
+        }
+
+
+        try {
+
+            const data =
+                await api(
+                    "/api/devices/"
+                    + selectedDevice.id
+                    + "/command",
+                    {
+
+                        method:
+                            "POST",
+
+                        body:
+                            JSON.stringify({
+
+                                command,
+
+                                packages
+
+                            })
+
+                    }
+                );
+
+
+            document
+                .getElementById(
+                    "result"
+                )
+                .textContent =
+                JSON.stringify(
+                    data,
+                    null,
+                    2
+                );
+
+
+        } catch (error) {
+
+            document
+                .getElementById(
+                    "result"
+                )
+                .textContent =
+                error.message;
+
+        }
+
+    }
+
+
+    // ========================================================
+    // INSTALL
+    // ========================================================
+
+    window.installPackage =
+        function() {
+
+            const packageName =
+                document
+                    .getElementById(
+                        "packageName"
+                    )
+                    .value
+                    .trim();
+
+
+            if (!packageName) {
+
+                return;
+
+            }
+
+
+            sendCommand(
+                "install",
+                [packageName]
+            );
+
+        };
+
+
+    // ========================================================
+    // REMOVE
+    // ========================================================
+
+    window.removePackage =
+        function() {
+
+            const packageName =
+                document
+                    .getElementById(
+                        "packageName"
+                    )
+                    .value
+                    .trim();
+
+
+            if (!packageName) {
+
+                return;
+
+            }
+
+
+            if (
+                !confirm(
+                    "Paket wirklich entfernen?"
+                )
+            ) {
+
+                return;
+
+            }
+
+
+            sendCommand(
+                "remove",
+                [packageName]
+            );
+
+        };
+
+
+    // ========================================================
+    // UPDATE
+    // ========================================================
+
+    window.updatePackage =
+        function() {
+
+            const packageName =
+                document
+                    .getElementById(
+                        "packageName"
+                    )
+                    .value
+                    .trim();
+
+
+            if (!packageName) {
+
+                return;
+
+            }
+
+
+            sendCommand(
+                "update",
+                [packageName]
+            );
+
+        };
+
+
+    // ========================================================
+    // SYSTEM
+    // ========================================================
+
+    window.systemCommand =
+        function() {
+
+            sendCommand(
+                "system"
+            );
+
+        };
+
+
+    // ========================================================
+    // REBOOT
+    // ========================================================
+
+    window.rebootPi =
+        function() {
+
+            if (
+                !confirm(
+                    "Raspberry Pi wirklich neu starten?"
+                )
+            ) {
+
+                return;
+
+            }
+
+
+            sendCommand(
+                "reboot"
+            );
+
+        };
+
+
+    // ========================================================
+    // SHUTDOWN
+    // ========================================================
+
+    window.shutdownPi =
+        function() {
+
+            if (
+                !confirm(
+                    "Raspberry Pi wirklich ausschalten?"
+                )
+            ) {
+
+                return;
+
+            }
+
+
+            sendCommand(
+                "shutdown"
+            );
+
+        };
+
+
+    // ========================================================
+    // HTML ESCAPEN
+    // ========================================================
+
+    function escapeHtml(
+        value
+    ) {
+
+        return String(
+            value
+        )
+            .replace(
+                /&/g,
+                "&amp;"
+            )
+            .replace(
+                /</g,
+                "&lt;"
+            )
+            .replace(
+                />/g,
+                "&gt;"
+            )
+            .replace(
+                /"/g,
+                "&quot;"
+            )
+            .replace(
+                /'/g,
+                "&#039;"
+            );
+
+    }
+
+</script>
+
+</body>
+
+</html>
