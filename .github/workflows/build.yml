@@ -1,6 +1,7 @@
 name: Build Nova Pi Store
 
 on:
+
   push:
     branches:
       - main
@@ -9,6 +10,7 @@ on:
 
 
 permissions:
+
   contents: write
   pages: write
   id-token: write
@@ -16,33 +18,39 @@ permissions:
 
 jobs:
 
+  # ============================================================
+  # BUILD
+  # ============================================================
+
   build:
 
     name: Build Debian Package and APT Repository
 
     runs-on: ubuntu-latest
 
+
     steps:
 
-      # ---------------------------------------------
+      # ----------------------------------------------------------
       # Repository
-      # ---------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Checkout repository
 
         uses: actions/checkout@v4
 
 
-      # ---------------------------------------------
-      # Projekt prüfen
-      # ---------------------------------------------
+      # ----------------------------------------------------------
+      # Projektstruktur
+      # ----------------------------------------------------------
 
       - name: Check project structure
 
         run: |
 
-          echo "Project structure:"
-          echo
+          echo "======================================"
+          echo "Project structure"
+          echo "======================================"
 
           find . \
             -maxdepth 4 \
@@ -50,9 +58,9 @@ jobs:
             | sort
 
 
-      # ---------------------------------------------
-      # Debian Tools prüfen
-      # ---------------------------------------------
+      # ----------------------------------------------------------
+      # Debian Tools
+      # ----------------------------------------------------------
 
       - name: Check Debian tools
 
@@ -61,9 +69,9 @@ jobs:
           dpkg-deb --version
 
 
-      # ---------------------------------------------
+      # ----------------------------------------------------------
       # Skripte ausführbar machen
-      # ---------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Make scripts executable
 
@@ -74,9 +82,9 @@ jobs:
           chmod +x scripts/install.sh
 
 
-      # ---------------------------------------------
+      # ----------------------------------------------------------
       # Debian Paket bauen
-      # ---------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Build Debian package
 
@@ -85,9 +93,9 @@ jobs:
           ./scripts/build-deb.sh 1.1.0
 
 
-      # ---------------------------------------------
+      # ----------------------------------------------------------
       # Debian Paket prüfen
-      # ---------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Check Debian package
 
@@ -106,9 +114,9 @@ jobs:
           dpkg-deb --info *.deb
 
 
-      # ---------------------------------------------
+      # ----------------------------------------------------------
       # APT Repository bauen
-      # ---------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Build APT repository
 
@@ -117,9 +125,9 @@ jobs:
           ./scripts/build-repository.sh 1.1.0
 
 
-      # ---------------------------------------------
+      # ----------------------------------------------------------
       # APT Repository prüfen
-      # ---------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Check APT repository
 
@@ -153,9 +161,9 @@ jobs:
             apt-repository/dists/stable/main/binary-all/Packages
 
 
-      # ---------------------------------------------
+      # ----------------------------------------------------------
       # Debian Artifact
-      # ---------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Upload Debian package
 
@@ -163,29 +171,16 @@ jobs:
 
         with:
 
-          name: nova-pi-store-deb-1.1.0
+          name: nova-pi-store-deb
 
           path: "*.deb"
 
           if-no-files-found: error
 
 
-      # ---------------------------------------------
-      # GitHub Pages Artifact
-      # ---------------------------------------------
-
-      - name: Upload APT repository
-
-        uses: actions/upload-pages-artifact@v3
-
-        with:
-
-          path: "./apt-repository"
-
-
-      # ---------------------------------------------
+      # ----------------------------------------------------------
       # GitHub Release
-      # ---------------------------------------------
+      # ----------------------------------------------------------
 
       - name: Create GitHub Release
 
@@ -201,29 +196,17 @@ jobs:
 
             # 🍓 Nova Pi Store v1.1.0
 
-            Neue Version des Nova Pi Store.
-
-            ## Neue Funktionen
-
-            - 🔎 App-Suche
-            - 🏷️ Kategorien
-            - 📦 Apps installieren
-            - 🗑️ Apps deinstallieren
-            - 🔄 Apps aktualisieren
-            - ✅ Installierte Apps erkennen
-            - 📊 Installierte Version anzeigen
-            - 🆕 Update verfügbar erkennen
+            Nova Pi Store für Raspberry Pi OS Lite.
 
             ## Installation
 
-            Das Debian-Paket kann direkt installiert werden:
-
             ```bash
-            sudo apt install ./nova-pi-store_1.1.0_all.deb
+            sudo apt update
+            sudo apt install nova-pi-store
             ```
 
-            Nach der Installation läuft die
-            Weboberfläche auf Port 8080.
+            Die Weboberfläche läuft anschließend
+            standardmäßig auf Port 8080.
 
           files: |
 
@@ -232,17 +215,18 @@ jobs:
           make_latest: true
 
 
-  # =================================================
+  # ============================================================
   # GITHUB PAGES
-  # =================================================
+  # ============================================================
 
-  deploy:
+  pages:
 
-    name: Deploy APT Repository
+    name: Deploy GitHub Pages
 
     needs: build
 
     runs-on: ubuntu-latest
+
 
     environment:
 
@@ -250,9 +234,78 @@ jobs:
 
       url: ${{ steps.deployment.outputs.page_url }}
 
+
     steps:
 
-      - name: Deploy GitHub Pages
+
+      # ----------------------------------------------------------
+      # Repository erneut auschecken
+      # ----------------------------------------------------------
+
+      - name: Checkout repository
+
+        uses: actions/checkout@v4
+
+
+      # ----------------------------------------------------------
+      # APT Repository aus Build übernehmen
+      # ----------------------------------------------------------
+
+      - name: Prepare GitHub Pages
+
+        run: |
+
+          echo "======================================"
+          echo "Preparing GitHub Pages"
+          echo "======================================"
+
+          mkdir -p pages
+
+          # ------------------------------------------------------
+          # Startseite
+          # ------------------------------------------------------
+
+          cp index.html pages/index.html
+
+
+          # ------------------------------------------------------
+          # APT Repository
+          # ------------------------------------------------------
+
+          cp -r apt-repository/* pages/
+
+
+          # ------------------------------------------------------
+          # Prüfen
+          # ------------------------------------------------------
+
+          echo
+          echo "Pages structure:"
+          echo
+
+          find pages \
+            -type f \
+            | sort
+
+
+      # ----------------------------------------------------------
+      # Pages Artifact
+      # ----------------------------------------------------------
+
+      - name: Upload Pages artifact
+
+        uses: actions/upload-pages-artifact@v3
+
+        with:
+
+          path: "./pages"
+
+
+      # ----------------------------------------------------------
+      # Deploy
+      # ----------------------------------------------------------
+
+      - name: Deploy to GitHub Pages
 
         id: deployment
 
