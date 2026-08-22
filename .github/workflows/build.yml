@@ -1,16 +1,13 @@
 name: Build Nova Pi Store
 
 on:
-
   push:
     branches:
       - main
 
   workflow_dispatch:
 
-
 permissions:
-
   contents: write
   pages: write
   id-token: write
@@ -27,7 +24,6 @@ jobs:
     name: Build Debian Package and APT Repository
 
     runs-on: ubuntu-latest
-
 
     steps:
 
@@ -179,6 +175,23 @@ jobs:
 
 
       # ----------------------------------------------------------
+      # APT Repository Artifact
+      # ----------------------------------------------------------
+
+      - name: Upload APT repository
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: nova-pi-store-apt
+
+          path: apt-repository
+
+          if-no-files-found: error
+
+
+      # ----------------------------------------------------------
       # GitHub Release
       # ----------------------------------------------------------
 
@@ -208,9 +221,7 @@ jobs:
             Die Weboberfläche läuft anschließend
             standardmäßig auf Port 8080.
 
-          files: |
-
-            *.deb
+          files: "*.deb"
 
           make_latest: true
 
@@ -227,7 +238,6 @@ jobs:
 
     runs-on: ubuntu-latest
 
-
     environment:
 
       name: github-pages
@@ -237,9 +247,8 @@ jobs:
 
     steps:
 
-
       # ----------------------------------------------------------
-      # Repository erneut auschecken
+      # Repository
       # ----------------------------------------------------------
 
       - name: Checkout repository
@@ -248,7 +257,22 @@ jobs:
 
 
       # ----------------------------------------------------------
-      # APT Repository aus Build übernehmen
+      # APT Repository herunterladen
+      # ----------------------------------------------------------
+
+      - name: Download APT repository
+
+        uses: actions/download-artifact@v4
+
+        with:
+
+          name: nova-pi-store-apt
+
+          path: apt-repository
+
+
+      # ----------------------------------------------------------
+      # GitHub Pages vorbereiten
       # ----------------------------------------------------------
 
       - name: Prepare GitHub Pages
@@ -259,11 +283,22 @@ jobs:
           echo "Preparing GitHub Pages"
           echo "======================================"
 
+
           mkdir -p pages
+
 
           # ------------------------------------------------------
           # Startseite
           # ------------------------------------------------------
+
+          if [ ! -f index.html ]; then
+
+            echo "FEHLER: index.html wurde nicht gefunden."
+
+            exit 1
+
+          fi
+
 
           cp index.html pages/index.html
 
@@ -272,15 +307,45 @@ jobs:
           # APT Repository
           # ------------------------------------------------------
 
+          if [ ! -d apt-repository ]; then
+
+            echo "FEHLER: apt-repository wurde nicht gefunden."
+
+            exit 1
+
+          fi
+
+
           cp -r apt-repository/* pages/
 
 
           # ------------------------------------------------------
-          # Prüfen
+          # apps.json veröffentlichen
+          # ------------------------------------------------------
+
+          if [ -f app/apps.json ]; then
+
+            cp app/apps.json pages/apps.json
+
+          elif [ -f apps.json ]; then
+
+            cp apps.json pages/apps.json
+
+          else
+
+            echo "WARNUNG: apps.json wurde nicht gefunden."
+
+          fi
+
+
+          # ------------------------------------------------------
+          # Übersicht
           # ------------------------------------------------------
 
           echo
-          echo "Pages structure:"
+          echo "======================================"
+          echo "GitHub Pages structure"
+          echo "======================================"
           echo
 
           find pages \
