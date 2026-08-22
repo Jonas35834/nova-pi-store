@@ -1,13 +1,16 @@
 name: Build Nova Pi Store
 
 on:
+
   push:
     branches:
       - main
 
   workflow_dispatch:
 
+
 permissions:
+
   contents: write
   pages: write
   id-token: write
@@ -86,7 +89,7 @@ jobs:
 
         run: |
 
-          ./scripts/build-deb.sh 1.1.0
+          ./scripts/build-deb.sh 1.1.1
 
 
       # ----------------------------------------------------------
@@ -118,7 +121,7 @@ jobs:
 
         run: |
 
-          ./scripts/build-repository.sh 1.1.0
+          ./scripts/build-repository.sh 1.1.1
 
 
       # ----------------------------------------------------------
@@ -201,13 +204,13 @@ jobs:
 
         with:
 
-          tag_name: v1.1.0
+          tag_name: v1.1.1
 
-          name: Nova Pi Store v1.1.0
+          name: Nova Pi Store v1.1.1
 
           body: |
 
-            # 🍓 Nova Pi Store v1.1.0
+            # 🍓 Nova Pi Store v1.1.1
 
             Nova Pi Store für Raspberry Pi OS Lite.
 
